@@ -17,8 +17,46 @@
   See the comments in the header file for an idea of what it should look like.
 */
 void sr_arpcache_sweepreqs(struct sr_instance *sr) { 
-    /* Fill this in */
+    struct sr_arpreq req = sr->cache->requests;
+    struct sr_arpreq next = req->next;
+
+    /*
+      Using a while loop here since sr_destroy_arpcache might destroy the current 
+      request and mess up the for loop.
+    */
+    while (req) {
+        next = req->next;
+        handle_arpreq(req);
+        req = next;
+    }
 }
+
+void handle_arpreq(struct sr_arpreq req) {
+    time_t curtime = time(NULL);
+
+    /*Get the arp request from the cache structure. */
+    if (difftime(curtime,req->sent) > 1.0) {
+        if (req->times_sent >= 5) {
+
+            sr_arpreq_destroy(req)
+        } else {
+            
+            
+        }
+    }
+
+    /*if difftime(now, req->sent) > 1.0
+        if req->times_sent >= 5:
+           send icmp host unreachable to source addr of all pkts waiting
+             on this request
+           arpreq_destroy(req)
+        else:
+           send arp request
+           req->sent = now
+           req->times_sent++
+    */
+}
+
 
 /* You should not need to touch the rest of this code. */
 
