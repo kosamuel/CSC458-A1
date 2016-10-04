@@ -31,17 +31,26 @@ void sr_arpcache_sweepreqs(struct sr_instance *sr) {
     }
 }
 
-void handle_arpreq(struct sr_arpreq req) {
+void handle_arpreq(struct sr_instance *sr) {
+    struct sr_arpreq req = sr->cache->requests;
     time_t curtime = time(NULL);
 
     /*Get the arp request from the cache structure. */
     if (difftime(curtime,req->sent) > 1.0) {
         if (req->times_sent >= 5) {
 
-            sr_arpreq_destroy(req)
+            sr_arpreq_destroy(req);
         } else {
-            
-            
+            /*Create Ethernet header.*/
+            struct sr_ethernet_hdr ether;
+            strncpy(ether.ether_dhost, 0xFFFFFFFFFFFF, ETHER_ADDR_LEN);
+            ether.ether_type = 0x0806;
+
+            /*Create ARP header.*/
+
+            sr_send_packet(sr, )
+            req->sent = curtime;
+            req->times_sent++;
         }
     }
 
