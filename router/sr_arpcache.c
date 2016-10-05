@@ -11,39 +11,53 @@
 #include "sr_if.h"
 #include "sr_protocol.h"
 
-/* 
-  This function gets called every second. For each request sent out, we keep
-  checking whether we should resend an request or destroy the arp request.
-  See the comments in the header file for an idea of what it should look like.
-*/
-void sr_arpcache_sweepreqs(struct sr_instance *sr) { 
-    struct sr_arpreq req = sr->cache->requests;
-    struct sr_arpreq next = req->next;
+void send_arp_packet(struct sr_instance* sr,
+                     struct sr_if* iface,
+                     struct sr_arpreq* req) {
+    /*Create Ethernet header.*/
+    struct sr_ethernet_hdr ether;
+    memcpy(ether.ether_dhost, (uint8_t *)0xFFFFFFFFFFFF, ETHER_ADDR_LEN);
+    memcpy(ether.ether_shost, iface->addr, ETHER_ADDR_LEN);
+    ether.ether_type = 0x0806;
 
-    /*
-      Using a while loop here since sr_destroy_arpcache might destroy the current 
-      request and mess up the for loop.
-    */
-    while (req) {
-        next = req->next;
-        handle_arpreq(req);
-        req = next;
-    }
+    /*Create ARP header.*/
+    struct sr_arp_hdr arp;
+    arp.ar_hrd = 0x0001;
+    arp.ar_pro = 0x0800;
+    arp.ar_hln = ETHER_ADDR_LEN;
+    arp.ar_pln = 4;
+    arp.ar_op = 0x0001;
+    memcpy(arp.ar_sha, iface->addr, ETHER_ADDR_LEN);
+    arp.ar_sip = iface->ip;
+    memcpy(arp.ar_tha, (uint8_t *)0x000000000000, ETHER_ADDR_LEN);
+    arp.ar_tip = req->ip;
+    
+    unsigned int etherlen = sizeof(ether);
+    unsigned int arplen = sizeof(arp);
+    unint8_t* buf = (uint8_t *) malloc(etherlen + arplen);
+    memcpy(buf, &ether, etherlen);
+    memcpy(&buf[etherlen], arp, arplen);
+
+    /*sr_send_packet(sr, bug, etherlen+arplen, iface->name);*/
+    printf("ethertype: %d", buf[12]);
+    printf("%d\n", buf[13]);
+    free(buf);
 }
 
-void handle_arpreq(struct sr_instance *sr) {
-    struct sr_arpreq req = sr->cache->requests;
+void handle_arpreq(struct sr_instance *sr, struct sr_arpreq* req) {
     time_t curtime = time(NULL);
 
     /*Get the arp request from the cache structure. */
     if (difftime(curtime,req->sent) > 1.0) {
         if (req->times_sent >= 5) {
 
-            sr_arpreq_destroy(req);
+            struct sr_arpcache *cache = &sr->cache;
+            sr_arpreq_destroy(cache, req);
         } else {
             /*Make the packet and send it.*/
+            struct sr_if *iface;
             for (iface = sr->if_list; iface != NULL; iface = iface->next) {
-                send_arp_packet(sr, iface);
+                send_arp_packet(sr, iface, req);
             
             }
 
@@ -54,33 +68,24 @@ void handle_arpreq(struct sr_instance *sr) {
     }
 }
 
-uint8_t* send_arp_packet(struct sr_instance* sr,
-                         struct sr_if* iface) {
-    /*Create Ethernet header.*/
-    struct sr_ethernet_hdr ether;
-    strncpy(ether.ether_dhost, 0xFFFFFFFFFFFF, ETHER_ADDR_LEN);
-    strncpy(ether.ether_shost, sr_if->addr, ETHER_ADDR_LEN);
-    ether.ether_type = 0x0806;
+/* 
+  This function gets called every second. For each request sent out, we keep
+  checking whether we should resend an request or destroy the arp request.
+  See the comments in the header file for an idea of what it should look like.
+*/
+void sr_arpcache_sweepreqs(struct sr_instance *sr) { 
+    struct sr_arpreq* req = sr->cache.requests;
+    struct sr_arpreq* next = req->next;
 
-    /*Create ARP header.*/
-    struct sr_arp_hdr arp;
-    arp.ar_hrd = 0x0001;
-    arp.ar_pro = 0x0800;
-    arp.ar_hln = ETHER_ADDR_LEN;
-    arp.ar_pln = 4;
-    arp.ar_op = 0x0001;
-    strncpy(arp.ar_sha, iface->addr);
-    arp.ar_sip = iface.ip;
-    strncpy(arp.ar_tha, 0x000000000000, ETHER_ADDR_LEN);
-    arp.ar_tip = sr->cache->requests->ip;
-    
-    unsigned int etherlen = sizeof(ether);
-    unsigned int arplen = sizeof(arp);
-    buf = (uint8_t *) malloc(etherlen + arplen);
-    memcpy(buf, ether, etherlen);
-    memcpy(buf[etherlen], arp, arplen);
-
-    sr_send_packet(sr, bug, etherlen+arplen, iface->name);
+    /*
+      Using a while loop here since sr_destroy_arpcache might destroy the current 
+      request and mess up the for loop.
+    */
+    while (req) {
+        next = req->next;
+        handle_arpreq(sr, req);
+        req = next;
+    }
 }
 
 /* You should not need to touch the rest of this code. */
