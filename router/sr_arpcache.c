@@ -41,31 +41,47 @@ void handle_arpreq(struct sr_instance *sr) {
 
             sr_arpreq_destroy(req);
         } else {
-            /*Create Ethernet header.*/
-            struct sr_ethernet_hdr ether;
-            strncpy(ether.ether_dhost, 0xFFFFFFFFFFFF, ETHER_ADDR_LEN);
-            ether.ether_type = 0x0806;
+            /*Make the packet and send it.*/
+            for (iface = sr->if_list; iface != NULL; iface = iface->next) {
+                send_arp_packet(sr, iface);
+            
+            }
 
-            /*Create ARP header.*/
-
-            sr_send_packet(sr, )
             req->sent = curtime;
             req->times_sent++;
+
         }
     }
-
-    /*if difftime(now, req->sent) > 1.0
-        if req->times_sent >= 5:
-           send icmp host unreachable to source addr of all pkts waiting
-             on this request
-           arpreq_destroy(req)
-        else:
-           send arp request
-           req->sent = now
-           req->times_sent++
-    */
 }
 
+uint8_t* send_arp_packet(struct sr_instance* sr,
+                         struct sr_if* iface) {
+    /*Create Ethernet header.*/
+    struct sr_ethernet_hdr ether;
+    strncpy(ether.ether_dhost, 0xFFFFFFFFFFFF, ETHER_ADDR_LEN);
+    strncpy(ether.ether_shost, sr_if->addr, ETHER_ADDR_LEN);
+    ether.ether_type = 0x0806;
+
+    /*Create ARP header.*/
+    struct sr_arp_hdr arp;
+    arp.ar_hrd = 0x0001;
+    arp.ar_pro = 0x0800;
+    arp.ar_hln = ETHER_ADDR_LEN;
+    arp.ar_pln = 4;
+    arp.ar_op = 0x0001;
+    strncpy(arp.ar_sha, iface->addr);
+    arp.ar_sip = iface.ip;
+    strncpy(arp.ar_tha, 0x000000000000, ETHER_ADDR_LEN);
+    arp.ar_tip = sr->cache->requests->ip;
+    
+    unsigned int etherlen = sizeof(ether);
+    unsigned int arplen = sizeof(arp);
+    buf = (uint8_t *) malloc(etherlen + arplen);
+    memcpy(buf, ether, etherlen);
+    memcpy(buf[etherlen], arp, arplen);
+
+    sr_send_packet(sr, bug, etherlen+arplen, iface->name);
+}
 
 /* You should not need to touch the rest of this code. */
 
