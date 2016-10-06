@@ -86,6 +86,18 @@ void sr_handlepacket(struct sr_instance* sr,
 
 }/* end sr_ForwardPacket */
 
+/* Converts a uint8_t array into a uint32_t. */
+uint32_t bit_size_conversion(uint8_t bytes[]) {
+  int i;
+  uint32_t thirty_two = 0x0000;
+
+  for (i = 0; i < 4; i++) {
+    thirty_two = (thirty_two << (i * 8)) || bytes[i];
+  }
+
+  return thirty_two;
+}
+
 void handle_arppacket(struct sr_instance* sr,
                       uint8_t * packet, 
                       unsigned int len,
@@ -100,7 +112,7 @@ void handle_arppacket(struct sr_instance* sr,
       replace the source address
       */
       uint8_t packet_copy[len];
-      memcpy(packet_copy, packet, len);
+      memcpy(packet_copy, &packet, len);
 
       /* Ethernet Information. */
       uint8_t src_ether[ETHER_ADDR_LEN];
@@ -109,25 +121,27 @@ void handle_arppacket(struct sr_instance* sr,
       /* ARP packet information. */
       uint8_t src_hdw[ETHER_ADDR_LEN];
       uint8_t src_pcl[4];
-      uint8_t des_hdw[ETHER_ADDR_LEN] = sr_get_interface(sr, interface)->addr;
+      uint8_t des_hdw[ETHER_ADDR_LEN];
+      unsigned char * iface_addr = sr_get_interface(sr, interface)->addr;
+      memcpy(des_hdw[0], iface_addr, ETHER_ADDR_LEN);
       uint8_t des_pcl[4];
 
       /* Save the destination and source address information. */
-      memcpy(dest_ether, packet[0], ETHER_ADDR_LEN);
-      memcpy(src_ether, packet[6], ETHER_ADDR_LEN);
+      memcpy(dest_ether, &packet[0], ETHER_ADDR_LEN);
+      memcpy(src_ether, &packet[6], ETHER_ADDR_LEN);
 
-      memcpy(src_hdw, packet[22], ETHER_ADDR_LEN);
-      memcpy(src_pcl, packet[28], 4);
-      memcpy(des_pcl, packet[38], 4);
+      memcpy(src_hdw, &packet[22], ETHER_ADDR_LEN);
+      memcpy(src_pcl, &packet[28], 4);
+      memcpy(des_pcl, &packet[38], 4);
 
       /* Write to the packet copy. */
       packet_copy[21] = 0x02;
-      memcpy(packet_copy[0], dest_ether, ETHER_ADDR_LEN);
-      memcpy(packet_copy[6], src_ether, ETHER_ADDR_LEN);
-      memcpy(packet_copy[22], des_hdw, ETHER_ADDR_LEN);
-      memcpy(packet_copy[28], des_pcl, 4);
-      memcpy(packet_copy[32], src_hdw, ETHER_ADDR_LEN);
-      memcpy(packet_copy[38], des_pcl, 4);
+      memcpy(&packet_copy[0], &dest_ether, ETHER_ADDR_LEN);
+      memcpy(&packet_copy[6], src_ether, ETHER_ADDR_LEN);
+      memcpy(&packet_copy[22], des_hdw, ETHER_ADDR_LEN);
+      memcpy(&packet_copy[28], des_pcl, 4);
+      memcpy(&packet_copy[32], src_hdw, ETHER_ADDR_LEN);
+      memcpy(&packet_copy[38], des_pcl, 4);
 
       /* Send the ARP reply. */
       sr_send_packet(sr, packet_copy, sizeof(packet_copy), interface);
@@ -139,19 +153,19 @@ void handle_arppacket(struct sr_instance* sr,
     /* Cache reply. */
     unsigned char mac[ETHER_ADDR_LEN];
     
-    memcpy(mac, packet[22], ETHER_ADDR_LEN);
+    memcpy(mac[0], (unsigned char *) packet[22], ETHER_ADDR_LEN);
     uint8_t packet_ip[4];
-    memcpy(packet_ip, packet[28], 4);
-    uint32_t ip = 8bit_32bit_conversion(packet_ip);
+    memcpy(packet_ip, &packet[28], 4);
+    uint32_t ip = bit_size_conversion(packet_ip);
 
-    struct sr_arpreq *requests = sr_arpcache_insert(sr->cache, mac, ip);
+    struct sr_arpreq *requests = sr_arpcache_insert(&sr->cache, mac, ip);
     
     /* 
     Go through request queue and send queued packets
     for this arp.
     */
     struct sr_packet *rpacket;
-    if (&requests != NULL) {
+    if (requests != NULL) {
       for(rpacket = requests->packets; rpacket != NULL; rpacket = rpacket->next) {
         sr_send_packet(sr, rpacket->buf, sizeof(rpacket->buf), rpacket->iface);
 
@@ -159,19 +173,7 @@ void handle_arppacket(struct sr_instance* sr,
     }
 
     /* Remove the request queue. */
-    sr_arpreq_destroy(sr->cache, requests);
+    sr_arpreq_destroy(&sr->cache, requests);
 
   }
-}
-
-/* Converts a uint8_t array into a uint32_t. */
-uint32_t 8bit_32bit_conversion(uint8_t[4] bytes) {
-  int i;
-  uint32_t 32bit = 0x0000;
-
-  for (i = 0; i < 4; i++) {
-    32bit = (32bit << (i * 8)) || bytes[i];
-  }
-
-  return 32bit;
 }

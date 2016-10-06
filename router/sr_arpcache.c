@@ -16,8 +16,8 @@ void send_arp_packet(struct sr_instance* sr,
                      struct sr_arpreq* req) {
     /*Create Ethernet header.*/
     struct sr_ethernet_hdr ether;
-    unsigned long num = 0xFFFFFFFFFFFF
-    uint8_t* broadcast = (uint8_t *) &num;
+    unsigned long num = 0xFFFFFFFFFFFF;
+    uint8_t* broadcast = (uint8_t *) num;
 
     memcpy(ether.ether_dhost, broadcast, ETHER_ADDR_LEN);
     memcpy(ether.ether_shost, iface->addr, ETHER_ADDR_LEN);
@@ -40,9 +40,9 @@ void send_arp_packet(struct sr_instance* sr,
     
     unsigned int etherlen = sizeof(ether);
     unsigned int arplen = sizeof(arp);
-    unint8_t* buf = (uint8_t *) malloc(etherlen + arplen);
+    uint8_t* buf = (uint8_t *) malloc(etherlen + arplen);
     memcpy(buf, &ether, etherlen);
-    memcpy(&buf[etherlen], arp, arplen);
+    memcpy(&buf[etherlen], &arp, arplen);
 
     /*sr_send_packet(sr, bug, etherlen+arplen, iface->name);*/
     printf("ethertype: %d", buf[12]);
