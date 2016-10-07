@@ -16,7 +16,10 @@ void send_arp_packet(struct sr_instance* sr,
                      struct sr_arpreq* req) {
     /*Create Ethernet header.*/
     struct sr_ethernet_hdr ether;
-    memcpy(ether.ether_dhost, (uint8_t *)0xFFFFFFFFFFFF, ETHER_ADDR_LEN);
+    unsigned long num = 0xFFFFFFFFFFFF
+    uint8_t* broadcast = (uint8_t *) &num;
+
+    memcpy(ether.ether_dhost, broadcast, ETHER_ADDR_LEN);
     memcpy(ether.ether_shost, iface->addr, ETHER_ADDR_LEN);
     ether.ether_type = 0x0806;
 
@@ -29,7 +32,10 @@ void send_arp_packet(struct sr_instance* sr,
     arp.ar_op = 0x0001;
     memcpy(arp.ar_sha, iface->addr, ETHER_ADDR_LEN);
     arp.ar_sip = iface->ip;
-    memcpy(arp.ar_tha, (uint8_t *)0x000000000000, ETHER_ADDR_LEN);
+
+    unsigned char no_addr[ETHER_ADDR_LEN] = {0x00,0x00,0x00,0x00,0x00,0x00};
+
+    memcpy(arp.ar_tha, no_addr, ETHER_ADDR_LEN);
     arp.ar_tip = req->ip;
     
     unsigned int etherlen = sizeof(ether);
@@ -75,7 +81,7 @@ void handle_arpreq(struct sr_instance *sr, struct sr_arpreq* req) {
 */
 void sr_arpcache_sweepreqs(struct sr_instance *sr) { 
     struct sr_arpreq* req = sr->cache.requests;
-    struct sr_arpreq* next = req->next;
+    struct sr_arpreq* next;
 
     /*
       Using a while loop here since sr_destroy_arpcache might destroy the current 

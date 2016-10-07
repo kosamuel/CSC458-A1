@@ -79,6 +79,20 @@ void sr_handlepacket(struct sr_instance* sr,
   printf("*** -> Received packet of length %d \n",len);
 
   /* fill in code here */
+  /* The received packet is an arp packet.*/
+  if (packet[12] == 0x08 && packet[13] == 0x06) {
+    handle_arppacket(sr, packet);
+  }
 
 }/* end sr_ForwardPacket */
 
+void handle_arppacket(struct sr_instance* sr,
+                      uint8_t * packet) {
+  /* The packet is an arp request. */
+  if (packet[21] == 0x0001) {
+
+  /* The packet is an arp reply. */
+  } else if (packet[21] == 0x0002) {
+    
+  }
+}
