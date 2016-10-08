@@ -89,10 +89,29 @@ void sr_handlepacket(struct sr_instance* sr,
 void handle_arppacket(struct sr_instance* sr,
                       uint8_t * packet) {
   /* The packet is an arp request. */
-  if (packet[21] == 0x0001) {
+  if (packet[21] == 0x01) {
+    struct sr_arpreq *req;
+    uint8_t buf[4];
+    memcpy(buf, packet[34], 4);
+    uint32_t ip = 8bit_32bit_conversion(buf);
+
+    for (req = sr->cache->requests; req != NULL; req = req->next) {
+      if ()
 
   /* The packet is an arp reply. */
-  } else if (packet[21] == 0x0002) {
-    
+  } else if (packet[21] == 0x02) {
+
   }
+}
+
+/* Converts a uint8_t array into a uint32_t. */
+uint32_t 8bit_32bit_conversion(uint8_t[4] bytes) {
+  int i;
+  uint32_t 32bit = 0x0000;
+
+  for (i = 0; i < 4; i++) {
+    32bit = (32bit << (i * 8)) || bytes[i];
+  }
+
+  return 32bit;
 }
