@@ -81,22 +81,58 @@ void sr_handlepacket(struct sr_instance* sr,
   /* fill in code here */
   /* The received packet is an arp packet.*/
   if (packet[12] == 0x08 && packet[13] == 0x06) {
-    handle_arppacket(sr, packet);
+    handle_arppacket(sr, packet, len, interface);
   }
 
 }/* end sr_ForwardPacket */
 
 void handle_arppacket(struct sr_instance* sr,
-                      uint8_t * packet) {
+                      uint8_t * packet, 
+                      unsigned int len,
+                      char* interface) {
   /* The packet is an arp request. */
   if (packet[21] == 0x01) {
-    struct sr_arpreq *req;
-    uint8_t buf[4];
-    memcpy(buf, packet[34], 4);
-    uint32_t ip = 8bit_32bit_conversion(buf);
+    /* Check if the request is for this router. */
+    /* Leave blank for now, the interface should handle it. */
+      /* 
+      Set the Opcode to reply
+      Swap the destination and source addresses
+      replace the source address
+      */
+      uint8_t packet_copy[len];
+      memcpy(packet_copy, packet, len);
 
-    for (req = sr->cache->requests; req != NULL; req = req->next) {
-      if ()
+      /* Ethernet Information. */
+      uint8_t src_ether[ETHER_ADDR_LEN];
+      uint8_t dest_ether[ETHER_ADDR_LEN];
+
+      /* ARP packet information. */
+      uint8_t src_hdw[ETHER_ADDR_LEN];
+      uint8_t src_pcl[4];
+      uint8_t des_hdw[ETHER_ADDR_LEN] = sr_get_interface(sr, interface)->addr;
+      uint8_t des_pcl[4];
+
+      /* Save the destination and source address information. */
+      memcpy(dest_ether, packet[0], ETHER_ADDR_LEN);
+      memcpy(src_ether, packet[6], ETHER_ADDR_LEN);
+
+      memcpy(src_hdw, packet[22], ETHER_ADDR_LEN);
+      memcpy(src_pcl, packet[28], 4);
+      memcpy(des_pcl, packet[38], 4);
+
+      /* Write to the packet copy. */
+      packet_copy[21] = 0x02;
+      memcpy(packet_copy[0], dest_ether, ETHER_ADDR_LEN);
+      memcpy(packet_copy[6], src_ether, ETHER_ADDR_LEN);
+      memcpy(packet_copy[22], des_hdw, ETHER_ADDR_LEN);
+      memcpy(packet_copy[28], des_pcl, 4);
+      memcpy(packet_copy[32], src_hdw, ETHER_ADDR_LEN);
+      memcpy(packet_copy[38], des_pcl, 4);
+
+      /* Send the ARP reply. */
+      sr_send_packet(sr, packet_copy, sizeof(packet_copy), interface);
+
+    /* If the request is not for this router, destroy it. */
 
   /* The packet is an arp reply. */
   } else if (packet[21] == 0x02) {
