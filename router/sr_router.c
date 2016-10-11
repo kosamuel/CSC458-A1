@@ -136,6 +136,30 @@ void handle_arppacket(struct sr_instance* sr,
 
   /* The packet is an arp reply. */
   } else if (packet[21] == 0x02) {
+    /* Cache reply. */
+    unsigned char mac[ETHER_ADDR_LEN];
+    
+    memcpy(mac, packet[22], ETHER_ADDR_LEN);
+    uint8_t packet_ip[4];
+    memcpy(packet_ip, packet[28], 4);
+    uint32_t ip = 8bit_32bit_conversion(packet_ip);
+
+    struct sr_arpreq *requests = sr_arpcache_insert(sr->cache, mac, ip);
+    
+    /* 
+    Go through request queue and send queued packets
+    for this arp.
+    */
+    struct sr_packet *rpacket;
+    if (&requests != NULL) {
+      for(rpacket = requests->packets; rpacket != NULL; rpacket = rpacket->next) {
+        sr_send_packet(sr, rpacket->buf, sizeof(rpacket->buf), rpacket->iface);
+
+      }
+    }
+
+    /* Remove the request queue. */
+    sr_arpreq_destroy(sr->cache, requests);
 
   }
 }
