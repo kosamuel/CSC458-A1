@@ -82,7 +82,6 @@ void handle_arppacket(struct sr_instance* sr,
 
       /* Ethernet Information. */
       uint8_t src_ether[ETHER_ADDR_LEN];
-      uint8_t dest_ether[ETHER_ADDR_LEN];
 
       /* ARP packet information. */
       uint8_t src_hdw[ETHER_ADDR_LEN];
@@ -148,7 +147,7 @@ void handle_ippacket(struct sr_instance* sr,
                       unsigned int len,
                       char* interface) {
 
-}
+
 uint8_t packet_copy[len];
 memcpy(packet_copy, packet, len);
 
@@ -175,22 +174,22 @@ if (memcmp(des_addr, iface, ETHER_ADDR_LEN)) {
 
   /* For each routing table entry. */
   for (rtable = sr->routing_table; rtable != NULL; rtable = rtable->next) {
-    printf("Prefix %d\n", rtable->dest);
+    printf("Prefix %s\n", inet_ntoa(rtable->dest));
     printf("Destination IP %d\n", ip);
 
     /* Check longest prefix match with the IP address above. */
-    if (memcmp(rtable->dest, ip, sizeof(rtable-dest))) {
-      struct sr_arpentry *arpentry = sr_arpcache_lookup(sr->cache, ip);
+    if (memcmp(&rtable->dest, &ip, sizeof(rtable->dest))) {
+      struct sr_arpentry *arpentry = sr_arpcache_lookup(&sr->cache, ip);
 
       /* If the arp was a miss. */
       if (arpentry == NULL) {
         printf("Queuing request: Line 187\n");
-        sr_arpcache_queuereq(sr->cache, ip, packet_copy, len, rtable.interface);
+        sr_arpcache_queuereq(&sr->cache, ip, packet_copy, len, rtable->interface);
         printf("Finished queuing request: Line 189\n");
 
       } else {
         printf("Redirecting packet: Line 192\n");
-        sr_send_packet(sr, packet_copy, len, rtable.interface);
+        sr_send_packet(sr, packet_copy, len, rtable->interface);
         printf("Finished redirecting packet: Line 194\n");
 
       }
@@ -202,6 +201,7 @@ if (memcmp(des_addr, iface, ETHER_ADDR_LEN)) {
     }
 
   }  
+}
 }
 
 /* If the packet is not for this router. */
