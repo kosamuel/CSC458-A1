@@ -93,7 +93,6 @@ void handle_arppacket(struct sr_instance* sr,
       uint8_t des_pcl[4];
 
       /* Save the destination and source address information. */
-      memcpy(dest_ether, &packet[0], ETHER_ADDR_LEN);
       memcpy(src_ether, &packet[6], ETHER_ADDR_LEN);
 
       memcpy(src_hdw, &packet[22], ETHER_ADDR_LEN);
@@ -144,6 +143,69 @@ void handle_arppacket(struct sr_instance* sr,
   }
 }
 
+void handle_ippacket(struct sr_instance* sr,
+                      uint8_t * packet, 
+                      unsigned int len,
+                      char* interface) {
+
+}
+uint8_t packet_copy[len];
+memcpy(packet_copy, packet, len);
+
+/* Ethernet Information. */
+uint8_t dest_ether[ETHER_ADDR_LEN];
+memcpy(dest_ether, &packet[0], ETHER_ADDR_LEN);
+unsigned char *des_addr = dest_ether;
+
+unsigned char *iface = sr_get_interface(sr, interface)->addr;
+
+/* If the packet is for this router. */
+if (memcmp(des_addr, iface, ETHER_ADDR_LEN)) {
+  printf("Successfully compared addresses: Line 164\n");
+  /* If it is an ICMP echo request. */
+
+} else {
+  /* Check routing table. */
+  struct sr_rt *rtable;
+
+  /* IP address information. */
+  uint8_t packet_ip[4];
+  memcpy(packet_ip, (uint8_t *)&packet[28], 4);
+  uint32_t ip = bit_size_conversion(packet_ip);
+
+  /* For each routing table entry. */
+  for (rtable = sr->routing_table; rtable != NULL; rtable = rtable->next) {
+    printf("Prefix %d\n", rtable->dest);
+    printf("Destination IP %d\n", ip);
+
+    /* Check longest prefix match with the IP address above. */
+    if (memcmp(rtable->dest, ip, sizeof(rtable-dest))) {
+      struct sr_arpentry *arpentry = sr_arpcache_lookup(sr->cache, ip);
+
+      /* If the arp was a miss. */
+      if (arpentry == NULL) {
+        printf("Queuing request: Line 187\n");
+        sr_arpcache_queuereq(sr->cache, ip, packet_copy, len, rtable.interface);
+        printf("Finished queuing request: Line 189\n");
+
+      } else {
+        printf("Redirecting packet: Line 192\n");
+        sr_send_packet(sr, packet_copy, len, rtable.interface);
+        printf("Finished redirecting packet: Line 194\n");
+
+      }
+    
+    /* There were no matches. */
+    } else {
+      printf("No prefix match\n");
+
+    }
+
+  }  
+}
+
+/* If the packet is not for this router. */
+
 /*---------------------------------------------------------------------
  * Method: sr_handlepacket(uint8_t* p,char* interface)
  * Scope:  Global
@@ -176,6 +238,11 @@ void sr_handlepacket(struct sr_instance* sr,
   /* The received packet is an arp packet.*/
   if (packet[12] == 0x08 && packet[13] == 0x06) {
     handle_arppacket(sr, packet, len, interface);
+
+  /* The received packet is an IP packet. */  
+  } else if (packet[12] == 0x08 && packet[13] == 0x00) {
+    handle_ippacket(sr, packet, len, interface);
+
   }
 
 }/* end sr_ForwardPacket */
