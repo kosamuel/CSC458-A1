@@ -74,34 +74,41 @@ void send_icmp(struct sr_instance* sr,
                uint8_t type, 
                uint8_t code) {
 
-  /* Create ICMP header */
-  /* Echo Reply */
-  if (type == 0x00) {
-    uint8_t len_in_packet[2];
-    memcpy(len_in_packet, &packet[16], 2);
-    int ip_len = htons(bit_size_conversion(len_in_packet));
+  printf("ip_len before changes: %d-%d\n", packet[16], packet[17]);
+  
+  /* Create ICMP header first */
+  uint8_t *icmp_hdr = icmp_t3(&packet[14], len - 14, type, code);
+  
+  /* Update IP packet next */
+  /* Update total length */
+  uint8_t len_in_packet[2];
+  memcpy(len_in_packet, &packet[16], 2);
+  int ip_len = htons(bit_size_conversion(len_in_packet)) + 4;
+  packet[16] = (ip_len) >> 8;
+  packet[17] = (ip_len);
 
-    uint8_t buf[len];
-    uint8_t *icmp_hdr = icmp_t3(&packet[38], len - 38, type, code);
+  printf("ip_len after changes: %d-%d\n", packet[16], packet[17]);
 
-  } else {
-    /* ICMP Errors */
-    uint8_t len_in_packet[2];
-    memcpy(len_in_packet, &packet[16], 2);
-    int ip_len = htons(bit_size_conversion(len_in_packet)) + 4;
-    packet[16] = (ip_len) >> 8;
-    packet[17] = (ip_len);
+  uint8_t buf[len + 4];
+  printf("ICMP type: %d\n", icmp_hdr[0]);
 
-    uint8_t buf[len + 4];
-    uint8_t *icmp_hdr = icmp_t3(&packet[34], len - 34, type, code);
+  printf("First 3 bytes of the packet in icmp: %d-%d-%d-%d-%d\n", icmp_hdr[8],
+						icmp_hdr[9],
+						icmp_hdr[10],
+						icmp_hdr[11],
+						icmp_hdr[12]);
 
-  }
+  printf("First 3 bytes of packet: %d-%d-%d-%d-%d\n", packet[14],
+						packet[15],
+						packet[16],
+						packet[17],
+						packet[18]);
 
   /* Get necessary information */
   struct sr_if *this_if = sr_get_interface(sr, interface);
-  uint8_t *packet_owner_mac;
+  uint8_t packet_owner_mac[6];
   memcpy(packet_owner_mac, &packet[6], ETHER_ADDR_LEN);
-  uint8_t *packet_owner_ip;
+  uint8_t packet_owner_ip[4];
   memcpy(packet_owner_ip, &packet[26], 4);
 
   /* Update IP header */
@@ -118,12 +125,41 @@ void send_icmp(struct sr_instance* sr,
   packet[24] = new_checksum0;
   packet[25] = new_checksum1;
 
-  /* Put the packet together */
-  memcpy(buf, packet, sizeof(packet));
-  memcpy(buf, packet_owner_mac, ETHER_ADDR_LEN);
-  memcpy(&buf[6], &this_if->mac, ETHER_ADDR_LEN);
-  memcpy(buf[34], icmp_hdr, sizeof(icmp_hdr));
+  printf("packet_owner_mac: %d:%d:%d:%d:%d:%d\n", packet[6],
+						packet[7],
+						packet[8],
+						packet[9],
+						packet[10],
+						packet[11]);
 
+  printf("packet_owner_ip: %d.%d.%d.%d\n", packet[26],
+					packet[27],
+					packet[28],
+					packet[29]);
+
+  printf("IP protocol: %d\n", packet[23]);
+  printf("ICMP type, code: %d, %d\n", icmp_hdr[0], icmp_hdr[1]);
+
+  /* Put the packet together */
+  memcpy(buf, packet, len);
+  memcpy(buf, packet_owner_mac, ETHER_ADDR_LEN);
+  memcpy(&buf[6], &this_if->addr, ETHER_ADDR_LEN);
+  memcpy(&buf[34], icmp_hdr, ip_len - 20);
+
+  printf("new dest mac: %d:%d:%d:%d:%d:%d\n", buf[0],
+						buf[1],
+						buf[2],
+						buf[3],
+						buf[4],
+						buf[5]);
+
+  printf("new dest ip: %d.%d.%d.%d\n", buf[30],
+					buf[31],
+					buf[32],
+					buf[33]);
+
+  printf("Packet ICMP type, code: %d, %d\n", buf[34], buf[35]);
+  printf("Interface name: %s\n", interface);
   sr_send_packet(sr, buf, sizeof(buf), interface);
 }
 
@@ -302,7 +338,7 @@ void handle_ippacket(struct sr_instance* sr,
     if (packet[23] == 0x01) {
       if (packet[34] == 0x08 && packet[35] == 0x00) {
       /*if (1) {*/
-        struct sr_if * return_iface = sr_get_interface(sr, interface);
+        /*struct sr_if * return_iface = sr_get_interface(sr, interface);*/
 
         uint8_t packet_copy2[len];
         memcpy(packet_copy2, packet, len);
