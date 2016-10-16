@@ -273,10 +273,10 @@ void handle_ippacket(struct sr_instance* sr,
   /* Get destination IP address for this packet. */
   uint8_t des_addr[4];
   memcpy(des_addr, &packet[30], 4);
-  uint32_t des_addr32 = bit_size_conversion(des_addr);
+  uint32_t des_addr32 = htonl(bit_size_conversion(des_addr));
   char des_addr_str[9];
 
-  uint32_t this_ip = sr_get_interface(sr, interface)->ip;
+  uint32_t this_ip = htonl(sr_get_interface(sr, interface)->ip);
   sprintf(des_addr_str, "%d.%d.%d.%d", des_addr[3], 
 					des_addr[2],
 					des_addr[1],
@@ -290,7 +290,7 @@ void handle_ippacket(struct sr_instance* sr,
   printf("des_addr32: %d\n", des_addr32);
   printf("this_ip: %d\n", this_ip);
 
-  if (des_addr32 == this_ip) {
+  if (memcmp(&des_addr32, &this_ip, 4) == 0) {
   /*if (1) {*/
     printf("Successfully compared addresses: Line 164\n");
 
@@ -327,9 +327,13 @@ void handle_ippacket(struct sr_instance* sr,
         memcpy(packet_copy2, &packet[6], ETHER_ADDR_LEN);
         memcpy(&packet_copy2[6], &dst_mac_copy, ETHER_ADDR_LEN);
         
-        memcpy(&packet_copy2[26], &this_ip, 4);
+        memcpy(&packet_copy2[26], &des_addr, 4);
         memcpy(&packet_copy2[30], &src_addr_copy, 4);
 
+	printf("Src in copy: %d-%d-%d-%d\n", packet_copy2[26],
+					packet_copy2[27],
+					packet_copy2[28],
+					packet_copy2[29]);
         
         uint8_t ip_len8[2];
         memcpy(ip_len8, &packet_copy2[16], 2);
@@ -352,6 +356,7 @@ void handle_ippacket(struct sr_instance* sr,
 
     /*} else if (packet[23] == 0x06 || packet[23] == 0x11) {*/
     } else {
+        printf("ADDR comparison = false");
       
         uint8_t packet_copy2[len + 4];
         memcpy(packet_copy2, packet, 34);
@@ -407,6 +412,7 @@ void handle_ippacket(struct sr_instance* sr,
     }
 
   } else {
+    printf("XXXX Comparison failed\n");
     /* Check routing table. */
     struct sr_rt *rtable;
     char ip_string[9];
@@ -484,46 +490,100 @@ void handle_ippacket(struct sr_instance* sr,
       
       /* There were no matches. */
       } else {
+        printf("Send net unavailable ICMP!!!!!!!!!!!!!!!\n");
+        /*send_icmp(sr, packet_copy2, len, interface, 0x03, 0x00);*/ 
 
-        /*send_icmp(sr, packet_copy2, len, interface, 0x03, 0x00);*/
-         
         uint8_t src_addr_copy[4];
         memcpy(src_addr_copy, &packet[26], 4); /* Get the packet source ip */
-        uint32_t des_addr = bit_size_conversion(src_addr_copy);
-        struct sr_arpentry* destination = sr_arpcache_lookup(&sr->cache, des_addr); /* Get the packet source mac */
+	
+	uint8_t packet_copy2[len + 4];
+	memcpy(packet_copy2, packet, 34);
+	printf("No probs in line 501\n");
+	packet_copy2[23] = 0x01;
+	packet_copy2[34] = 0x03;
+	packet_copy2[35] = 0x00;
+	packet_copy2[36] = 0x00;
+	packet_copy2[37] = 0x00;
+	memcpy(&packet_copy2[38], &packet[34], len - 34);
+	
+	printf("No problems in line 507\n");
 
+	int icmp_len = sizeof(packet_copy2) - 34;
+
+	uint16_t icmp_checksum = htons(cksum(&packet_copy2[34], icmp_len));
+	uint8_t icmp_checksum0 = icmp_checksum >> 8;
+	uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
+
+	packet_copy2[36] = icmp_checksum0;
+	packet_copy2[37] = icmp_checksum1;	
+
+        uint8_t dst_mac_copy[6];
+        memcpy(dst_mac_copy, &packet[0], ETHER_ADDR_LEN);
+        memcpy(packet_copy2, &packet[6], ETHER_ADDR_LEN);
+        memcpy(&packet_copy2[6], &dst_mac_copy, ETHER_ADDR_LEN);
         
-        uint8_t packet_copy2[len];
-        memcpy(packet_copy2, packet, len);
-        uint8_t *icmp_hdr = icmp_t3(&packet_copy2[14], 0x03, 0x00);
+        memcpy(&packet_copy2[26], &this_ip, 4);
+        memcpy(&packet_copy2[30], &src_addr_copy, 4);
 
+	printf("Src in copy 2: %d-%d-%d-%d\n", packet_copy2[26],
+					packet_copy2[27],
+					packet_copy2[28],
+					packet_copy2[29]);
         
-        struct sr_if * return_iface = sr_get_interface(sr, interface);
-        struct sr_ethernet_hdr ether;
+	printf("Dst ip in copy 2: %d-%d-%d-%d\n", packet_copy2[30],
+					packet_copy2[31],
+					packet_copy2[32],
+					packet_copy2[33]);
+
+        uint8_t ip_len8[2];
+        memcpy(ip_len8, &packet_copy2[16], 2);
+        int ip_len = htons(bit_size_conversion16(ip_len8));
+
+
+
+        packet_copy2[24] = 0x00;
+        packet_copy2[25] = 0x00;
+
+        uint16_t new_checksum = htons(cksum(&packet_copy2[14], ip_len + 4));
+	uint8_t new_checksum0 = new_checksum >> 8;
+	uint8_t new_checksum1 = (new_checksum << 8) >> 8;
+	packet_copy2[24] = new_checksum0;
+	packet_copy2[25] = new_checksum1;
         
-        memcpy(ether.ether_dhost, destination->mac, ETHER_ADDR_LEN);
-        memcpy(ether.ether_shost, return_iface->addr, ETHER_ADDR_LEN); /* This router's mac */
-        ether.ether_type = htons(0x0800);
+      
 
-        
-        uint8_t source_ip[4]; /* This router's ip */
-        source_ip[3] = return_iface->ip;
-        source_ip[2] = return_iface->ip >> 8;
-        source_ip[1] = return_iface->ip >> 16;
-        source_ip[0] = return_iface->ip >> 24;
-        printf("source_ip: %d%d%d%d\n", source_ip[0], source_ip[1], source_ip[2], source_ip[3]);
-        printf("Original source ip: %d\n", return_iface->ip);
+	printf("orig src ether: %d:%d:%d:%d:%d:%d\n", packet[6],
+						packet[7],
+						packet[8],
+						packet[9],
+						packet[10],
+						packet[11]);
 
-        memcpy(&packet_copy2[26], source_ip, 4);
-        memcpy(&packet_copy2[30], src_addr_copy, 4);
 
-        
-        uint8_t buf[34 + sizeof(icmp_hdr)];
-        memcpy(buf, &packet_copy2, len);
-        memcpy(buf, &ether, sizeof(ether));
-        memcpy(&buf[34], &icmp_hdr, sizeof(icmp_hdr));
+	printf("copy dest ether: %d:%d:%d:%d:%d:%d\n", packet_copy2[0],
+						packet_copy2[1],
+						packet_copy2[2],
+						packet_copy2[3],
+						packet_copy2[4],
+						packet_copy2[5]);
+	
+	printf("dest ip in copy: %d-%d-%d-%d\n", packet_copy2[30],
+					packet_copy2[31],
+					packet_copy2[32],
+					packet_copy2[33]);
+        	
+	printf("Packet 2's icmp type: %d\n", packet_copy2[34]);
+	printf("Packet 2's icmp code: %d\n", packet_copy2[35]);
+	printf("Packet 2's content: %d-%d-%d\n", packet_copy2[38],
+						packet_copy2[39],
+						packet_copy2[40]);
 
-        sr_send_packet(sr, buf, sizeof(buf), interface);
+	printf("Orig Packet's content: %d-%d-%d\n", packet[34],
+						packet[35],
+						packet[36]);
+
+	printf("NO issue making the packet with the icmp ln 532\n");	
+        sr_send_packet(sr, packet_copy2, sizeof(packet_copy2), interface);
       }
     free(longest_prefix);  
 
