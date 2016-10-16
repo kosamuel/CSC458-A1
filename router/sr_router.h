@@ -67,6 +67,8 @@ int sr_read_from_server(struct sr_instance* );
 /* -- sr_router.c -- */
 void sr_init(struct sr_instance* );
 void sr_handlepacket(struct sr_instance* , uint8_t * , unsigned int , char* );
+uint32_t bit_size_conversion(uint8_t bytes[4]);
+uint16_t bit_size_conversion16(uint8_t bytes[2]);
 
 /* -- sr_if.c -- */
 void sr_add_interface(struct sr_instance* , const char* );

@@ -52,13 +52,14 @@ void send_arp_packet(struct sr_instance* sr,
 
 void handle_arpreq(struct sr_instance *sr, struct sr_arpreq* req) {
     time_t curtime = time(NULL);
+    struct sr_packet *packet;
 
     /*Get the arp request from the cache structure. */
     if (difftime(curtime,req->sent) > 1.0) {
         if (req->times_sent >= 5) {
-            struct *sr_packet packet;
+            
             for (packet = req->packets; packet != NULL; packet = packet->next) {
-
+		
 
                 /* Get IP information. */
                 uint8_t src_addr_copy[4];
@@ -67,12 +68,12 @@ void handle_arpreq(struct sr_instance *sr, struct sr_arpreq* req) {
                 struct sr_arpentry* destination = sr_arpcache_lookup(&sr->cache, des_addr);
 
                 /* Make the ICMP header. */
-                uint8_t packet_copy2[len];
-                memcpy(packet_copy2, packet, len);
+                uint8_t packet_copy2[packet->len];
+                memcpy(packet_copy2, packet, packet->len);
                 uint8_t icmp_hdr = icmp_t3(&packet_copy2[14], 0x03, 0x00);
 
                 /* Make the Ethernet Header. */
-                struct sr_if * return_iface = sr_get_interface(sr, interface);
+                struct sr_if * return_iface = sr_get_interface(sr, packet->iface);
                 struct sr_ethernet_hdr ether;
                 
                 memcpy(ether.ether_dhost, destination->mac, ETHER_ADDR_LEN);
