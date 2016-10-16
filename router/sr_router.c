@@ -58,7 +58,7 @@ uint32_t bit_size_conversion(uint8_t bytes[4]) {
   uint32_t thirty_two = 0x0000;
 
   for (i = 0; i < 4; i++) {
-    thirty_two = (thirty_two << (i * 8)) || bytes[i];
+    thirty_two = (thirty_two << (i * 8)) d| bytes[i];
   }
 
   return thirty_two;
@@ -148,60 +148,65 @@ void handle_ippacket(struct sr_instance* sr,
                       char* interface) {
 
 
-uint8_t packet_copy[len];
-memcpy(packet_copy, packet, len);
+  uint8_t packet_copy[len];
+  memcpy(packet_copy, packet, len);
 
-/* Ethernet Information. */
-uint8_t dest_ether[ETHER_ADDR_LEN];
-memcpy(dest_ether, &packet[0], ETHER_ADDR_LEN);
-unsigned char *des_addr = dest_ether;
+  /* Get destination IP address for this packet. */
+  uint8_t des_addr[4];
+  memcpy(des_addr, &packet[30], 4);
+  uint32_t des_addr32 = des_addr;
 
-unsigned char *iface = sr_get_interface(sr, interface)->addr;
+  uint32_t this_ip = sr_get_interface(sr, interface)->ip;
 
-/* If the packet is for this router. */
-if (memcmp(des_addr, iface, ETHER_ADDR_LEN)) {
-  printf("Successfully compared addresses: Line 164\n");
-  /* If it is an ICMP echo request. */
+  /* If the packet is for this router. */
+  if (memcmp(&des_addr32, &this_ip, 4) == 0) {
+    printf("Successfully compared addresses: Line 164\n");
+    /* If it is an ICMP echo request. */
 
-} else {
-  /* Check routing table. */
-  struct sr_rt *rtable;
+  } else {
+    /* Check routing table. */
+    struct sr_rt *rtable;
+    char ip_string[8];
 
-  /* IP address information. */
-  uint8_t packet_ip[4];
-  memcpy(packet_ip, (uint8_t *)&packet[28], 4);
-  uint32_t ip = bit_size_conversion(packet_ip);
+    sprintf(ip_string, "%d.%d.%d.%d", des_addr[0], des_addr[1],
+                                      des_addr[2], des_addr[3]);
 
-  /* For each routing table entry. */
-  for (rtable = sr->routing_table; rtable != NULL; rtable = rtable->next) {
-    printf("Prefix %s\n", inet_ntoa(rtable->dest));
-    printf("Destination IP %d\n", ip);
+    /* IP address information. */
+    /*
+    uint8_t packet_ip[4];
+    memcpy(packet_ip, (uint8_t *)&packet[28], 4);
+    uint32_t ip = bit_size_conversion(packet_ip);*/
 
-    /* Check longest prefix match with the IP address above. */
-    if (memcmp(&rtable->dest, &ip, sizeof(rtable->dest))) {
-      struct sr_arpentry *arpentry = sr_arpcache_lookup(&sr->cache, ip);
+    /* For each routing table entry. */
+    for (rtable = sr->routing_table; rtable != NULL; rtable = rtable->next) {
+      printf("Prefix %s\n", inet_ntoa(rtable->dest));
+      printf("Destination IP %d\n", ip);
 
-      /* If the arp was a miss. */
-      if (arpentry == NULL) {
-        printf("Queuing request: Line 187\n");
-        sr_arpcache_queuereq(&sr->cache, ip, packet_copy, len, rtable->interface);
-        printf("Finished queuing request: Line 189\n");
+      /* Check longest prefix match with the IP address above. */
+      if (strcmp(inet_ntoa(rtable->dest), ip_string) == 0) {
+        struct sr_arpentry *arpentry = sr_arpcache_lookup(&sr->cache, ip);
 
+        /* If the arp was a miss. */
+        if (arpentry == NULL) {
+          printf("Queuing request: Line 187\n");
+          sr_arpcache_queuereq(&sr->cache, ip, packet_copy, len, rtable->interface);
+          printf("Finished queuing request: Line 189\n");
+
+        } else {
+          printf("Redirecting packet: Line 192\n");
+          sr_send_packet(sr, packet_copy, len, rtable->interface);
+          printf("Finished redirecting packet: Line 194\n");
+
+        }
+      
+      /* There were no matches. */
       } else {
-        printf("Redirecting packet: Line 192\n");
-        sr_send_packet(sr, packet_copy, len, rtable->interface);
-        printf("Finished redirecting packet: Line 194\n");
+        printf("No prefix match\n");
 
       }
-    
-    /* There were no matches. */
-    } else {
-      printf("No prefix match\n");
 
-    }
-
-  }  
-}
+    }  
+  }
 }
 
 /* If the packet is not for this router. */
