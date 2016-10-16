@@ -58,7 +58,7 @@ uint32_t bit_size_conversion(uint8_t bytes[4]) {
   uint32_t thirty_two = 0x0000;
 
   for (i = 0; i < 4; i++) {
-    thirty_two = (thirty_two << (i * 8)) d| bytes[i];
+    thirty_two = (thirty_two << (i * 8)) | bytes[i];
   }
 
   return thirty_two;
@@ -180,7 +180,7 @@ void handle_ippacket(struct sr_instance* sr,
     /* For each routing table entry. */
     for (rtable = sr->routing_table; rtable != NULL; rtable = rtable->next) {
       printf("Prefix %s\n", inet_ntoa(rtable->dest));
-      printf("Destination IP %d\n", ip);
+      printf("Destination IP %s\n", ip_string);
 
       /* Check longest prefix match with the IP address above. */
       if (strcmp(inet_ntoa(rtable->dest), ip_string) == 0) {
