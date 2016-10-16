@@ -232,12 +232,12 @@ void handle_ippacket(struct sr_instance* sr,
     struct sr_arpentry* destination = sr_arpcache_lookup(&sr->cache, des_addr);
 
     /* Make the ICMP header. */
-    uint8_t packet_copy2[packet->len];
-    memcpy(packet_copy2, packet, packet->len);
+    uint8_t packet_copy2[len];
+    memcpy(packet_copy2, packet, len);
     uint8_t icmp_hdr = icmp_t3(&packet_copy2[14], 0x00, 0x00);
 
     /* Make the Ethernet Header. */
-    struct sr_if * return_iface = sr_get_interface(sr, packet->iface);
+    struct sr_if * return_iface = sr_get_interface(sr, interface);
     struct sr_ethernet_hdr ether;
     
     memcpy(ether.ether_dhost, destination->mac, ETHER_ADDR_LEN);
