@@ -622,7 +622,7 @@ void handle_ippacket(struct sr_instance* sr,
 
 void handle_icmp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, char *interface) {
   struct sr_nat *nat = &(sr->nat);
-  sr_nat_mapping_type = nat_mapping_icmp;
+  sr_nat_mapping_type type = nat_mapping_icmp;
   
   /***** Perform checksum. *****/
   /* Make a copy of the packet checksum */
@@ -649,38 +649,38 @@ void handle_icmp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, 
   /***** Check interface to determine if packet is internal or external *****/
 
   /* Internal interface */
-  if (interface == "eth1") {
-    /* Get NAT interface */
-    struct sr_if *iface = sr_get_interface(sr, interface);
-
+  if (strncmp(interface, "eth1", 4) == 0) {
     /* Source IP */
     uint8_t src_addr[4];
     memcpy(src_addr, &packet[26], 4);
     uint32_t src_addr32 = bit_size_conversion(src_addr);
 
     /* Lookup mapping */
-    struct sr_nat_mapping *mapping = sr_nat_lookup_internal(nat, src_addr32, id16, sr_nat_mapping_type);
+    struct sr_nat_mapping *mapping = sr_nat_lookup_internal(nat, src_addr32, id16, type);
 
     /***** If no mapping, insert new mapping *****/
     if (mapping == NULL) {
-      mapping = sr_nat_insert_mapping(nat, src_addr32, id16, sr_nat_mapping_type);
+      mapping = sr_nat_insert_mapping(nat, src_addr32, id16, type);
     }
 
     /***** Rewrite source IP and id *****/
     /* Change source IP into assigned external IP */
     /* Change id into external id */
-    memcpy(&packet[26], mapping->ip_ext, 4);
-    memcpy(&packet[38], mapping->aux_ext, 2);
+    packet[26] = mapping->ip_ext;
+    packet[27] = mapping->ip_ext >> 8;
+    packet[28] = mapping->ip_ext >> 16;
+    packet[29] = mapping->ip_ext >> 24;
+    packet[38] = mapping->aux_ext;
+    packet[39] = mapping->aux_ext >> 8;
 
   /* External interface */
-  } else if (interface == "eth2") {
+  } else if (strncmp(interface, "eth2", 4) == 0) {
     /* Destination IP */
     uint8_t des_addr[4];
     memcpy(des_addr, &packet[30], 4);
-    uint32_t des_addr32 = bit_size_conversion(des_addr);
-
+    
     /* Lookup mapping */
-    struct sr_nat_mapping *mapping = sr_nat_lookup_external(nat, des_addr32, id16, sr_nat_mapping_type);
+    struct sr_nat_mapping *mapping = sr_nat_lookup_external(nat, id16, type);
 
     if (mapping == NULL) {
       return;
@@ -689,8 +689,12 @@ void handle_icmp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, 
       /***** Rewrite destination IP and id *****/
       /* Change destination IP into internal host's */
       /* Change identifier to internal identifier */
-      memcpy(&packet[30], mapping->ip_int, 4);
-      memcpy(&packet[38], mapping->aux_int, 2);
+      packet[30] = mapping->ip_int;
+      packet[31] = mapping->ip_int >> 8;
+      packet[32] = mapping->ip_int >> 16;
+      packet[33] = mapping->ip_int >> 24;
+      packet[38] = mapping->aux_int;
+      packet[39] = (mapping->aux_int << 8) >> 8;
 
   }
  
@@ -701,7 +705,7 @@ void handle_icmp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, 
   packet[36] = icmp_checksum0;
   packet[37] = icmp_checksum1;
 
-  forward_packet(packet, interface, len, interface);
+  forward_packet(sr, packet, len, interface);
 
 }
 
@@ -719,9 +723,6 @@ void handle_natpacket(struct sr_instance* sr,
   uint8_t des_addr[4];
   memcpy(des_addr, &packet[30], 4);
   uint32_t des_addr32 = bit_size_conversion(des_addr);
-
-  /* Get the receiving interface's IP */
-  uint32_t this_ip = sr_get_interface(sr, interface)->ip;
 
   /* If the packet is for this router. */
   struct sr_if *iface;
@@ -752,7 +753,7 @@ void handle_natpacket(struct sr_instance* sr,
     handle_icmp_nat(sr, packet_copy, len, interface);
 
   } else if (packet[23] == 0x06) {
-    handle_tcp_nat();
+    /*handle_tcp_nat();*/
 
   }
 
@@ -800,8 +801,8 @@ void sr_handlepacket(struct sr_instance* sr,
   } else if (packet[12] == 0x08 && packet[13] == 0x00) {
       handle_ippacket(sr, packet, len, interface);
 
-    }
   }
+  
 
 }/* end sr_ForwardPacket */
 
