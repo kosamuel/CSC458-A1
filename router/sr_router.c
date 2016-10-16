@@ -54,12 +54,8 @@ void sr_init(struct sr_instance* sr)
 
 /* Converts a uint8_t array into a uint32_t. */
 uint32_t bit_size_conversion(uint8_t bytes[4]) {
-  int i;
-  uint32_t thirty_two = 0x0000;
-
-  for (i = 0; i < 4; i++) {
-    thirty_two = (thirty_two << (i * 8)) | bytes[i];
-  }
+  uint32_t thirty_two = bytes[0] | (bytes[1] << 8) |
+                 (bytes[2] << 16) | (bytes[3] << 24);
 
   return thirty_two;
 }
@@ -131,7 +127,7 @@ void handle_arppacket(struct sr_instance* sr,
     struct sr_packet *rpacket;
     if (requests != NULL) {
       for(rpacket = requests->packets; rpacket != NULL; rpacket = rpacket->next) {
-        sr_send_packet(sr, rpacket->buf, sizeof(rpacket->buf), rpacket->iface);
+        sr_send_packet(sr, rpacket->buf, rpacket->len, rpacket->iface);
 
       }
     }

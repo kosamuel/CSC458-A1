@@ -21,15 +21,15 @@ void send_arp_packet(struct sr_instance* sr,
 
     memcpy(ether.ether_dhost, &broadcast, ETHER_ADDR_LEN);
     memcpy(ether.ether_shost, iface->addr, ETHER_ADDR_LEN);
-    ether.ether_type = 0x0806;
+    ether.ether_type = htons(0x0806);
 
     /*Create ARP header.*/
     struct sr_arp_hdr arp;
-    arp.ar_hrd = 0x0001;
-    arp.ar_pro = 0x0800;
+    arp.ar_hrd = htons(0x0001);
+    arp.ar_pro = htons(0x0800);
     arp.ar_hln = ETHER_ADDR_LEN;
     arp.ar_pln = 4;
-    arp.ar_op = 0x0001;
+    arp.ar_op = htons(0x0001);
     memcpy(arp.ar_sha, iface->addr, ETHER_ADDR_LEN);
     arp.ar_sip = iface->ip;
 
@@ -44,7 +44,7 @@ void send_arp_packet(struct sr_instance* sr,
     memcpy(buf, &ether, etherlen);
     memcpy(&buf[etherlen], &arp, arplen);
 
-    /*sr_send_packet(sr, bug, etherlen+arplen, iface->name);*/
+    sr_send_packet(sr, buf, etherlen+arplen, iface->name);
     printf("ethertype: %d", buf[12]);
     printf("%d\n", buf[13]);
     free(buf);
