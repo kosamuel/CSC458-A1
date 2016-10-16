@@ -274,11 +274,23 @@ void handle_ippacket(struct sr_instance* sr,
   uint8_t des_addr[4];
   memcpy(des_addr, &packet[30], 4);
   uint32_t des_addr32 = bit_size_conversion(des_addr);
+  char des_addr_str[9];
 
   uint32_t this_ip = sr_get_interface(sr, interface)->ip;
+  sprintf(des_addr_str, "%d.%d.%d.%d", des_addr[3], 
+					des_addr[2],
+					des_addr[1],
+					des_addr[0]);
 
   /* If the packet is for this router. */
-  if (memcmp(&des_addr32, &this_ip, 4) == 0) {
+  printf("des_addr: %d-%d-%d-%d\n", des_addr[0],
+				des_addr[1],
+				des_addr[2],
+				des_addr[3]);
+  printf("des_addr32: %d\n", des_addr32);
+  printf("this_ip: %d\n", this_ip);
+
+  if (des_addr32 == this_ip) {
   /*if (1) {*/
     printf("Successfully compared addresses: Line 164\n");
 
@@ -286,8 +298,6 @@ void handle_ippacket(struct sr_instance* sr,
     if (packet[23] == 0x01) {
       if (packet[34] == 0x08 && packet[35] == 0x00) {
       /*if (1) {*/
-        struct sr_if * return_iface = sr_get_interface(sr, interface);
-
         uint8_t packet_copy2[len];
         memcpy(packet_copy2, packet, len);
 
