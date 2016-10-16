@@ -49,7 +49,7 @@ uint8_t * icmp_t3(uint8_t *payload, int len, uint8_t type, uint8_t code) {
       icmp_response.next_mtu = 0x0000;
       memcpy(icmp_response.data, payload, 28);
  
-      memcpy(buf, icmp_response, 36);
+      memcpy(buf, &icmp_response, 36);
 
       /* Perform Checksum */
       uint16_t icmp_checksum = htons(cksum(buf, 36));
@@ -60,7 +60,7 @@ uint8_t * icmp_t3(uint8_t *payload, int len, uint8_t type, uint8_t code) {
 
       return buf;
 
-    } else if (type == 0x00) {
+    } else {
       static uint8_t buf[8];
 
       struct sr_icmp_hdr icmp_response;
@@ -72,7 +72,7 @@ uint8_t * icmp_t3(uint8_t *payload, int len, uint8_t type, uint8_t code) {
       buf[7] = 0x00;
 
       /* Should contain information on the echo request */
-      memcpy(buf, icmp_response, 4);
+      memcpy(buf, &icmp_response, 4);
 
       /* Perform Checksum */
       uint16_t icmp_checksum = htons(cksum(buf, 8));
