@@ -328,14 +328,20 @@ void handle_ippacket(struct sr_instance* sr,
         ether.ether_type = htons(0x0800);
 
         /* Update IP information. */
-        memcpy(&packet_copy2[26], return_iface->ip, 4);
-        memcpy(&packet_copy2[30], destination->ip, 4);
+        uint8_t source_ip[4]; 
+        source_ip[0] = return_iface->ip >> 24;
+        source_ip[1] = (return_iface->ip << 8) >> 24;
+        source_ip[2] = (return_iface->ip << 16) >> 24;
+        source_ip[3] = (return_iface->ip << 24) >> 24;
+ 
+        memcpy(&packet_copy2[26], source_ip, 4);
+        memcpy(&packet_copy2[30], src_addr_copy, 4);
 
         /* Make the packet. */
         uint8_t buf[sizeof(ether) + sizeof(&packet_copy2[14]) + sizeof(icmp_hdr)];
         memcpy(buf, &ether, sizeof(ether));
-        memcpy(&buf[sizeof(ether)], &packet_copy2[14], sizeof(&packet_copy2[14]));
-        memcpy(&buf[sizeof(ether) + sizeof(&packet_copy2[14])], icmp_hdr, sizeof(icmp_hdr));
+        memcpy(&buf[sizeof(ether)], &packet_copy2[14], sizeof(packet_copy2) - sizeof(ether));
+        memcpy(&buf[sizeof(ether) + sizeof(&packet_copy2[14])], &icmp_hdr, sizeof(icmp_hdr));
 
         sr_send_packet(sr, buf, sizeof(&buf), return_iface->name);
 
