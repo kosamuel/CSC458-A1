@@ -166,7 +166,7 @@ void handle_ippacket(struct sr_instance* sr,
   } else {
     /* Check routing table. */
     struct sr_rt *rtable;
-    char ip_string[8];
+    char ip_string[9];
 
     sprintf(ip_string, "%d.%d.%d.%d", des_addr[0], des_addr[1],
                                       des_addr[2], des_addr[3]);
@@ -184,12 +184,12 @@ void handle_ippacket(struct sr_instance* sr,
 
       /* Check longest prefix match with the IP address above. */
       if (strcmp(inet_ntoa(rtable->dest), ip_string) == 0) {
-        struct sr_arpentry *arpentry = sr_arpcache_lookup(&sr->cache, ip);
+        struct sr_arpentry *arpentry = sr_arpcache_lookup(&sr->cache, des_addr32);
 
         /* If the arp was a miss. */
         if (arpentry == NULL) {
           printf("Queuing request: Line 187\n");
-          sr_arpcache_queuereq(&sr->cache, ip, packet_copy, len, rtable->interface);
+          sr_arpcache_queuereq(&sr->cache, des_addr32, packet_copy, len, rtable->interface);
           printf("Finished queuing request: Line 189\n");
 
         } else {

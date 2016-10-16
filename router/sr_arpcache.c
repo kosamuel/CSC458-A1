@@ -19,7 +19,7 @@ void send_arp_packet(struct sr_instance* sr,
     unsigned long num = 0xFFFFFFFFFFFF;
     uint8_t* broadcast = (uint8_t *) num;
 
-    memcpy(ether.ether_dhost, broadcast, ETHER_ADDR_LEN);
+    memcpy(ether.ether_dhost, &broadcast, ETHER_ADDR_LEN);
     memcpy(ether.ether_shost, iface->addr, ETHER_ADDR_LEN);
     ether.ether_type = 0x0806;
 
