@@ -57,14 +57,17 @@ void handle_arpreq(struct sr_instance *sr, struct sr_arpreq* req) {
     /*Get the arp request from the cache structure. */
     if (difftime(curtime,req->sent) > 1.0) {
         if (req->times_sent >= 5) {
-            
-            for (packet = req->packets; packet != NULL; packet = packet->next) {
-		        /*send_icmp(sr, packet->buf, packet->len, packet->iface, 0x03, 0x01);*/
+        
+	    for (packet = req->packets; packet != NULL; packet = packet->next) {
                 
-                uint8_t packet_copy[len];
-                memcpy(packet_copy, packet, len);
+                uint8_t packet_copy[packet->len];
+                memcpy(packet_copy, packet, packet->len);
 
-                send_icmp(sr, packet_copy, len, interface, 0x03, 0x01);
+		/*uint8_t source_ip[4];
+		memcpy(source_ip, &packet[26], 4);
+		char ip_string[9];*/
+
+                send_icmp(sr, packet_copy, packet->len, packet->iface, 0x03, 0x01);
                 
             }
 
