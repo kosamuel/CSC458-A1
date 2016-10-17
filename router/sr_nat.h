@@ -5,7 +5,8 @@
 #include <inttypes.h>
 #include <time.h>
 #include <pthread.h>
-#include "sr_router.h"
+
+struct sr_instance;
 
 typedef enum {
   nat_mapping_icmp,

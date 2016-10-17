@@ -6,6 +6,7 @@
 #include "sr_if.h"
 #include <stdlib.h>
 #include <string.h>
+#include "sr_router.h"
 
 int port_num = 5000;
 
