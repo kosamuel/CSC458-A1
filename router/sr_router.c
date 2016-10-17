@@ -127,6 +127,10 @@ void handle_arppacket(struct sr_instance* sr,
     struct sr_packet *rpacket;
     if (requests != NULL) {
       for(rpacket = requests->packets; rpacket != NULL; rpacket = rpacket->next) {
+        /* Fill out Ether header. */
+        struct sr_if* this_mac = sr_get_interface(sr, rpacket->iface);
+        memcpy(rpacket->buf, mac, 6);
+        memcpy(&rpacket->buf[6], this_mac->addr, 6);
         sr_send_packet(sr, rpacket->buf, rpacket->len, rpacket->iface);
 
       }
@@ -190,6 +194,13 @@ void handle_ippacket(struct sr_instance* sr,
 
         } else {
           printf("Redirecting packet: Line 192\n");
+
+          /* Update ethernet header before sending. */
+          struct sr_arpentry* destination = sr_arpcache_lookup(&sr->cache, des_addr32);
+          struct sr_if* this_mac = sr_get_interface(sr, rtable->interface);
+          memcpy(packet_copy, destination->mac, 6);
+          memcpy(&packet_copy[6], this_mac->addr, 6);
+
           sr_send_packet(sr, packet_copy, len, rtable->interface);
           printf("Finished redirecting packet: Line 194\n");
 
