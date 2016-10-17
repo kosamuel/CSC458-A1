@@ -154,7 +154,7 @@ void handle_ippacket(struct sr_instance* sr,
   /* Get destination IP address for this packet. */
   uint8_t des_addr[4];
   memcpy(des_addr, &packet[30], 4);
-  uint32_t des_addr32 = des_addr;
+  uint32_t des_addr32 = bit_size_conversion(des_addr);
 
   uint32_t this_ip = sr_get_interface(sr, interface)->ip;
 
