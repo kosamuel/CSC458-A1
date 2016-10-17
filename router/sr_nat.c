@@ -4,6 +4,8 @@
 #include "sr_nat.h"
 #include <unistd.h>
 #include "sr_if.h"
+#include <stdlib.h>
+#include <string.h>
 
 int port_num = 5000;
 
@@ -57,9 +59,9 @@ void *sr_nat_timeout(void *nat_ptr) {  /* Periodic Timout handling */
     struct sr_nat_mapping *prev = NULL;
 
     struct sr_nat_mapping *mapping;
-    for (mapping = &(sr->mappings); mapping != NULL; mapping->next) {
-      enum sr_nat_mapping_type icmp = nat_mapping_icmp;
-      enum sr_nat_mapping_type tcp = nat_mapping_tcp;
+    for (mapping = nat->mappings; mapping != NULL; mapping->next) {
+      sr_nat_mapping_type icmp = nat_mapping_icmp;
+      sr_nat_mapping_type tcp = nat_mapping_tcp;
 
       if (mapping->type == icmp) {
         if (difftime(curtime,mapping->last_updated) > nat->icmp_timeout) {
@@ -84,7 +86,7 @@ void *sr_nat_timeout(void *nat_ptr) {  /* Periodic Timout handling */
 
       } else if (mapping->type == tcp) {
 
-        enum sr_nat_connection_state established = EST;
+        sr_nat_connection_state established = EST;
         struct sr_nat_connection *conn;
         struct sr_nat_connection *prev_conn = NULL;
 
@@ -236,8 +238,7 @@ struct sr_nat_mapping *sr_nat_lookup_internal(struct sr_nat *nat,
 /* Insert a new mapping into the nat's mapping table.
    Actually returns a copy to the new mapping, for thread safety.
  */
-struct sr_nat_mapping *sr_nat_insert_mapping(struct sr_instance* sr, struct sr_nat *nat,
-  uint32_t ip_int, uint16_t aux_int, sr_nat_mapping_type type ) {
+struct sr_nat_mapping *sr_nat_insert_mapping(struct sr_instance* sr, struct sr_nat *nat, uint32_t ip_int, uint16_t aux_int, sr_nat_mapping_type type ) {
 
   pthread_mutex_lock(&(nat->lock));
 
@@ -257,7 +258,7 @@ struct sr_nat_mapping *sr_nat_insert_mapping(struct sr_instance* sr, struct sr_n
 
   /* Initialize connection */
   struct sr_nat_connection *conn = NULL;
-  new_mapping->conn = conn;
+  new_mapping->conns = conn;
 
   /* Add to exisiting list of mappings */
   if (nat->mappings != NULL) {
@@ -278,7 +279,7 @@ struct sr_nat_mapping *sr_nat_insert_mapping(struct sr_instance* sr, struct sr_n
   return mapping;
 }
 
-void insert_connection(struct sr_nat_mapping mapping, uint32_t ip_ext, uint16_t port_ext) {
+void insert_connection(struct sr_nat_mapping *mapping, uint32_t ip_ext, uint16_t port_ext) {
   struct sr_nat_connection *new_conn = (struct sr_nat_connection *) malloc(sizeof(struct sr_nat_connection));
   new_conn->current_state = SYN;
   new_conn->next_state = SYNACK;

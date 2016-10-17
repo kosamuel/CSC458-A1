@@ -69,9 +69,9 @@ int main(int argc, char **argv)
     char *logfile = 0;
     struct sr_instance sr;
     /* Default timeout times */
-    icmp_timeout = 60;
-    established_timeout = 7440;
-    transitory_timeout = 300;
+    int icmp_timeout = 60;
+    int established_timeout = 7440;
+    int transitory_timeout = 300;
 
     printf("Using %s\n", VERSION_INFO);
 

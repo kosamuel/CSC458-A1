@@ -17,6 +17,7 @@
 /* Added this line */
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "sr_if.h"
 #include "sr_rt.h"
@@ -53,9 +54,9 @@ void sr_init(struct sr_instance* sr, int nat_mode, int icmp_timeout, int establi
     /* Add initialization code here! */
     /* Initialize NAT struct */
     sr_nat_init(&(sr->nat));
-    sr->nat->icmp_timeout = icmp_timeout;
-    sr->nat->established_timeout = established_timeout;
-    sr->nat->transitory_timeout = transitory_timeout;
+    sr->nat.icmp_timeout = icmp_timeout;
+    sr->nat.established_timeout = established_timeout;
+    sr->nat.transitory_timeout = transitory_timeout;
 
 } /* -- sr_init -- */
 
@@ -623,10 +624,11 @@ void handle_ippacket(struct sr_instance* sr,
  *
  *---------------------------------------------------------------------*/
 
-void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, char *interface) {
+void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, char *interface, sr_nat_mapping_type type) {
   struct sr_nat *nat = &(sr->nat);
-  sr_nat_mapping_type type = nat_mapping_icmp;
-  
+  /*sr_nat_mapping_type type = nat_mapping_icmp;*/
+  struct sr_nat_mapping *mapping;  
+
   /***** Perform checksum. *****/
   /* Make a copy of the packet checksum */
   uint8_t cksum_buf[2];
@@ -658,7 +660,7 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
     uint32_t src_addr32 = bit_size_conversion(src_addr);
 
     /* Lookup mapping */
-    struct sr_nat_mapping *mapping = sr_nat_lookup_internal(nat, src_addr32, id16, type);
+    mapping = sr_nat_lookup_internal(nat, src_addr32, id16, type);
 
     /***** If no mapping, insert new mapping *****/
     if (mapping == NULL) {
@@ -688,7 +690,7 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
     memcpy(des_addr, &packet[30], 4);
     
     /* Lookup mapping */
-    struct sr_nat_mapping *mapping = sr_nat_lookup_external(nat, id16, type);
+    mapping = sr_nat_lookup_external(nat, id16, type);
 
     if (mapping == NULL) {
       return;
@@ -756,11 +758,11 @@ void handle_tcp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, c
     uint32_t src_addr32 = bit_size_conversion(src_addr);
 
     /* Lookup mapping */
-    struct sr_nat_mapping *mapping = sr_nat_lookup_internal(nat, src_addr32, id16, type);
+    struct sr_nat_mapping *mapping = sr_nat_lookup_internal(&(sr->nat), src_addr32, id16, type);
 
     /***** If no mapping, insert new mapping *****/
     if (mapping == NULL) {
-      mapping = sr_nat_insert_mapping(sr, nat, src_addr32, id16, type);
+      mapping = sr_nat_insert_mapping(sr, &(sr->nat), src_addr32, id16, type);
       /* Add new connection */
       insert_connection(mapping, dest_ip, ext_port);
 
@@ -816,12 +818,12 @@ void handle_tcp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, c
         }
 
       }
-
+    }
   /* External interface */
   } else if (strncmp(interface, "eth2", 4) == 0) {
     
     /* Lookup mapping */
-    struct sr_nat_mapping *mapping = sr_nat_lookup_external(nat, id16, type);
+    struct sr_nat_mapping *mapping = sr_nat_lookup_external(&(sr->nat), id16, type);
 
     if (mapping == NULL) {
       return;
@@ -829,10 +831,12 @@ void handle_tcp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, c
     } else {
 
       /***** Find existing connection *****/
-      struct sr_nat_connection *conn;
-      for (conn = mapping->conns; conn != NULL; conn->next) {
+      struct sr_nat_connection *conn = NULL;
+      struct sr_nat_connection *search_conn;
+      for (search_conn = mapping->conns; search_conn != NULL; search_conn->next) {
         /* Look for an exisiting connection to the specified host and port */
-        if ((conn->ip_ext == dest_ip) && (conn->aux_ext == ext_port)) {
+        if ((search_conn->ip_ext == dest_ip) && (search_conn->aux_ext == ext_port)) {
+	  conn = search_conn;
           break;
         } 
       }
@@ -852,26 +856,26 @@ void handle_tcp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, c
 
       /***** Check type of packet and state of connection *****/  
       /* If packet is a SYN ACK */
-      if ((packet[47] & 0b00010010) && (current_state == SYN)) {
-        current_state = SYNACK;
-        next_state = ACK;
+      if ((packet[47] & 0b00010010) && (conn->current_state == SYN)) {
+        conn->current_state = SYNACK;
+        conn->next_state = ACK;
         conn->last_updated = time(NULL);
 
       /* If packet is a FIN ACK */
-      } else if ((packet[47] & 0b00010001) && (current_state == FIN) && (next_state == FINACK)) {
-        current_state = FINACK;
-        next_state = FIN;
+      } else if ((packet[47] & 0b00010001) && (conn->current_state == FIN) && (conn->next_state == FINACK)) {
+        conn->current_state = FINACK;
+        conn->next_state = FIN;
         conn->last_updated = time(NULL);
 
       /* If packet is a FIN */
-      } else if ((packet[47] & 0b00000001) && (current_state == FINACK)) {
-        current_state = FIN;
-        next_state = ACK;
+      } else if ((packet[47] & 0b00000001) && (conn->current_state == FINACK)) {
+        conn->current_state = FIN;
+        conn->next_state = ACK;
         conn->last_updated = time(NULL);
 
       /* If packet is an ACK after a FIN packet */
-      } else if ((packet[47] & 0b00010000) && (current_state == FIN) && (next_state == ACK)) {
-        current_state = CLOSED;
+      } else if ((packet[47] & 0b00010000) && (conn->current_state == FIN) && (conn->next_state == ACK)) {
+        conn->current_state = CLOSED;
 
       } else if ((conn->current_state == EST) && (packet[47] & 0b00000001)) {
           conn->current_state = FIN;
@@ -928,10 +932,11 @@ void handle_natpacket(struct sr_instance* sr,
   }
 
   if (packet[23] == 0x01) {
-    nat_translate(sr, packet_copy, len, interface);
+    sr_nat_mapping_type type = nat_mapping_icmp;
+    nat_translate(sr, packet_copy, len, interface, type);
 
   } else if (packet[23] == 0x06) {
-    handle_tcp_nat();
+    handle_tcp_nat(sr, packet, len, interface);
 
   }
 
