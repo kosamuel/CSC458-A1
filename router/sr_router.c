@@ -60,6 +60,12 @@ uint32_t bit_size_conversion(uint8_t bytes[4]) {
   return thirty_two;
 }
 
+uint16_t bit_size_conversion16(uint8_t bytes[2]) {
+  uint32_t sixteen = bytes[0] | (bytes[1] << 8);
+
+  return sixteen;
+}
+
 void handle_arppacket(struct sr_instance* sr,
                       uint8_t * packet, 
                       unsigned int len,
@@ -131,6 +137,16 @@ void handle_arppacket(struct sr_instance* sr,
         struct sr_if* this_mac = sr_get_interface(sr, rpacket->iface);
         memcpy(rpacket->buf, mac, 6);
         memcpy(&rpacket->buf[6], this_mac->addr, 6);
+
+        /* Update checksum and TTL. */
+        int ip_len;
+        memcpy(ip_len, &rpacket->buf[16], 2);
+
+        rpacket->buf[22] = rpacket->buf[22] - 1;
+
+        uint16_t new_checksum = ntons(cksum(&rpacket->buf, ip_len));
+        memcpy(&rpacket->buf[24], new_checksum, 2);
+
         sr_send_packet(sr, rpacket->buf, rpacket->len, rpacket->iface);
 
       }
@@ -147,9 +163,32 @@ void handle_ippacket(struct sr_instance* sr,
                       unsigned int len,
                       char* interface) {
 
-
+  /* Perform checksum. */
   uint8_t packet_copy[len];
   memcpy(packet_copy, packet, len);
+  int ip_len;
+  memcpy(ip_len, &packet[16], 2);
+  printf("ip_len: %d\n", ip_len);
+  printf("True ip_len: %d%d\n", packet[16], packet[17]);
+  
+  uint8_t cksum_buf[2];
+  memcpy(cksum_buf, &packet[24], 2);
+  uint16_t this_cksum = bit_size_conversion16(cksum_buf);
+  printf("cksum: %d\n", this_cksum);
+  printf("True cksum: %d%d\n", packet[24], packet[25]);
+
+  uint16_t ip_checksum = cksum(packet_copy, ip_len);
+
+  if (ip_checksum != this_cksum) {
+    printf("Incorrect checksum line 173");
+    return;
+
+  /* Check for correct length. */
+  } else if (ip_len != len) {
+    printf("Incorrect length line 177");
+    return;
+
+  }
 
   /* Get destination IP address for this packet. */
   uint8_t des_addr[4];
@@ -200,6 +239,16 @@ void handle_ippacket(struct sr_instance* sr,
           struct sr_if* this_mac = sr_get_interface(sr, rtable->interface);
           memcpy(packet_copy, destination->mac, 6);
           memcpy(&packet_copy[6], this_mac->addr, 6);
+
+          /* Update checksum and TTL. */
+          printf("TTL before: %d\n", packet_copy[22]);
+          packet_copy[22] = packet_copy[22] - 1;
+          printf("TTL after: %d\n", packet_copy[22]);
+
+          uint16_t new_checksum = ntons(cksum(packet_copy, ip_len));
+          memcpy(&packet_copy[24], new_checksum, 2);
+          printf("cksum in packet: %d%d\n", packet_copy[24], packet_copy[25]);
+          printf("Reverse cksum: %d\n", new_checksum);
 
           sr_send_packet(sr, packet_copy, len, rtable->interface);
           printf("Finished redirecting packet: Line 194\n");
