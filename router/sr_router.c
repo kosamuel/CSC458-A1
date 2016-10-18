@@ -117,10 +117,10 @@ void handle_arppacket(struct sr_instance* sr,
       packet_copy[21] = 0x02;
       memcpy(&packet_copy[0], src_ether, ETHER_ADDR_LEN);
       memcpy(&packet_copy[6], iface_addr, ETHER_ADDR_LEN);
-      memcpy(&packet_copy[22], des_hdw, ETHER_ADDR_LEN);
+      memcpy(&packet_copy[22], iface_addr, ETHER_ADDR_LEN);
       memcpy(&packet_copy[28], des_pcl, 4);
       memcpy(&packet_copy[32], src_hdw, ETHER_ADDR_LEN);
-      memcpy(&packet_copy[38], des_pcl, 4);
+      memcpy(&packet_copy[38], src_pcl, 4);
 
       /* Send the ARP reply. */
       sr_send_packet(sr, packet_copy, sizeof(packet_copy), interface);
