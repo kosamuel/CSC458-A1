@@ -315,6 +315,26 @@ void handle_ippacket(struct sr_instance* sr,
 
   }  
 }
+/* a check for icmp */
+
+/*---------------------------------------------------------------------
+ * Method: sr_icmp_check
+ * Scope:  Global
+ *
+ * check if icmp_type is 11 (time exceeded) or icmp type is 3 for 
+ *destination unreachable
+ *
+ * Note: Both the packet buffer and the character's memory are handled
+ * by sr_vns_comm.c that means do NOT delete either.  Make a copy of the
+ * packet instead if you intend to keep it around beyond the scope of
+ * the method call.
+ *
+ *---------------------------------------------------------------------*/
+
+/* a function for sending the imcp error reply */
+
+
+
 
 /* If the packet is not for this router. */
 
