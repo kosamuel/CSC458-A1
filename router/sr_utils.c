@@ -30,7 +30,18 @@ uint8_t ip_protocol(uint8_t *buf) {
   return iphdr->ip_p;
 }
 
+/*returns icmp type3 or type 11 pointer*/
+sr_icmp_t3_hdr_t *send_icmp_t3(struct sr_ip_hdr *ip_hdr, uint8_t code,uint8_t type){
+  struct sr_icmp_t3_hdr_t *icmp_response;
 
+  icmp_response.icmp_type = type;
+  memcpy(imcp_response.data, ip_hdr,ICMP_DATA_SIZE);
+  icmp_response.icmp_code = code;
+  icmp_response.icmp_sum = 0;
+  icmp_response.icmp_sum = cksum(&(icmp_response),sizeof(sr_icmp_t3_hdr_t) + ICMP_DATA_SIZE);
+  return icmp_response;
+
+}
 /* Prints out formatted Ethernet address, e.g. 00:11:22:33:44:55 */
 void print_addr_eth(uint8_t *addr) {
   int pos = 0;
