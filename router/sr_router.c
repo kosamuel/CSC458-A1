@@ -318,18 +318,27 @@ void handle_ippacket(struct sr_instance* sr,
 /* a check for icmp */
 
 /*---------------------------------------------------------------------
- * Method: sr_icmp_check
+ * Method: check_icmp_vaild
  * Scope:  Global
  *
- * check if icmp_type is 11 (time exceeded) or icmp type is 3 for 
- *destination unreachable
+ * check vailness of icmp
  *
- * Note: Both the packet buffer and the character's memory are handled
- * by sr_vns_comm.c that means do NOT delete either.  Make a copy of the
- * packet instead if you intend to keep it around beyond the scope of
- * the method call.
  *
  *---------------------------------------------------------------------*/
+int check_icmp_vaild(struct sr_ip_hdr *ip_hdr)｛
+  sr_icmp_hdr_t *icmp_hdr = icmp_header(ip_hdr);
+  uint16_t c_icmp_sum;
+  uint16_t r_icmp_sum;
+
+  r_icmp_sum = icmp_hdr -> icmp_sum;
+  icmp_hdr -> icmp_sum = 0;
+  c_icmp_sum = cksum(icmp_hdr,ntohs(ip_hdr->ip_len) - ip_hdr->ip_h1 * 4);
+  if(c_icmp_sum != r_icmp_sum){
+    return 0;
+  }
+
+  return 1;
+}
 
 /* a function for sending the imcp error reply */
 
