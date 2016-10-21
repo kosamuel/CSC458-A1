@@ -290,7 +290,7 @@ void handle_ippacket(struct sr_instance* sr,
 
           /* Reset the checksum. */
           packet_copy[24] = 0x00;
-	  packet_copy[25] = 0x00;
+	        packet_copy[25] = 0x00;
 
           uint16_t new_checksum = htons(cksum(&packet_copy[14], ip_len));
           uint8_t new_checksum0 = new_checksum >> 8;

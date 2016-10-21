@@ -30,6 +30,31 @@ uint8_t ip_protocol(uint8_t *buf) {
   return iphdr->ip_p;
 }
 
+/*return a icmp header*/
+struct sr_icmp_hdr *icmp_header(struct sr_ip_hdr *ip_hdr){
+  return (struct sr_icmp_hdr *)((uint8_t *)(ip_hdr) + ip_hdr->ip_h1 * 4);
+}
+
+uint8_t *icmp_t3(uint8_t *ip_packet, uint8_t code, uint8_t type){
+  struct sr_icmp_t3_hdr_t *icmp_response;
+  uint8_t *buf[ICMP_DATA_SIZE + sizeof(struct sr_icmp_t3_hdr_t)];
+
+  /* Set up the ICMP header. */
+  icmp_response.icmp_type = type;
+  memcpy(imcp_response.data, ip_packet, ICMP_DATA_SIZE);
+  icmp_response.icmp_code = code;
+  icmp_response.icmp_sum = 0;
+
+  /* Copy to uint8_t buffer. */
+  memcpy(buf, icmp_response, sizeof(sr_icmp_t3_hdr_t) + ICMP_DATA_SIZE);
+
+  uint16_t icmp_checksum = htons(cksum(buf, sizeof(sr_icmp_t3_hdr_t) + ICMP_DATA_SIZE));
+  uint8_t icmp_checksum0 = icmp_checksum >> 8;
+  uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
+  buf[2] = icmp_checksum0;
+  buf[3] = icmp_checksum1;
+  return buf;
+}
 
 /* Prints out formatted Ethernet address, e.g. 00:11:22:33:44:55 */
 void print_addr_eth(uint8_t *addr) {

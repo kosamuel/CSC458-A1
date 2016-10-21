@@ -56,6 +56,7 @@ void handle_arpreq(struct sr_instance *sr, struct sr_arpreq* req) {
     /*Get the arp request from the cache structure. */
     if (difftime(curtime,req->sent) > 1.0) {
         if (req->times_sent >= 5) {
+            
 
             struct sr_arpcache *cache = &sr->cache;
             sr_arpreq_destroy(cache, req);
