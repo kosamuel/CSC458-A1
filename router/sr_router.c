@@ -308,7 +308,36 @@ void handle_ippacket(struct sr_instance* sr,
       
       /* There were no matches. */
       } else {
-        printf("No prefix match\n");
+        /* Get IP information. */
+        uint8_t src_addr_copy[4];
+        memcpy(src_addr_copy, &packet[26], 4);
+        uint32_t des_addr = bit_size_conversion(src_addr_copy);
+        struct sr_arpentry* destination = sr_arpcache_lookup(&sr->cache, des_addr);
+
+        /* Make the ICMP header. */
+        uint8_t packet_copy2[len];
+        memcpy(packet_copy2, packet, len);
+        uint8_t icmp_hdr = icmp_t3(&packet_copy2[14], 0x03, 0x00);
+
+        /* Make the Ethernet Header. */
+        struct sr_if * return_iface = sr_get_interface(sr, interface);
+        struct sr_ethernet_hdr ether;
+        
+        memcpy(ether.ether_dhost, destination->mac, ETHER_ADDR_LEN);
+        memcpy(ether.ether_shost, return_iface->addr, ETHER_ADDR_LEN);
+        ether.ether_type = htons(0x0800);
+
+        /* Update IP information. */
+        memcpy(&packet_copy2[26], return_iface->ip, 4);
+        memcpy(&packet_copy2[30], destination->ip, 4);
+
+        /* Make the packet. */
+        uint8_t buf[sizeof(ether) + sizeof(&packet_copy2[14]) + sizeof(icmp_hdr)];
+        memcpy(buf, &ether, sizeof(ether));
+        memcpy(&buf[sizeof(ether)], &packet_copy2[14], sizeof(&packet_copy2[14]));
+        memcpy(&buf[sizeof(ether) + sizeof(&packet_copy2[14])], icmp_hdr, sizeof(icmp_hdr));
+
+        sr_send_packet(sr, buf, sizeof(&buf), return_iface->name);
 
       }
     free(longest_prefix);  

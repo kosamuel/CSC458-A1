@@ -41,7 +41,7 @@ uint8_t *icmp_t3(uint8_t *ip_packet, uint8_t code, uint8_t type){
 
   /* Set up the ICMP header. */
   icmp_response.icmp_type = type;
-  memcpy(imcp_response.data, ip_packet, ICMP_DATA_SIZE);
+  memcpy(imcp_response.data, ip_packet, sizeof(&ip_packet));
   icmp_response.icmp_code = code;
   icmp_response.icmp_sum = 0;
 
