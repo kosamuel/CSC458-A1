@@ -70,7 +70,7 @@ void handle_arpreq(struct sr_instance *sr, struct sr_arpreq* req) {
                 /* Make the ICMP header. */
                 uint8_t packet_copy2[packet->len];
                 memcpy(packet_copy2, packet, packet->len);
-                uint8_t icmp_hdr = icmp_t3(&packet_copy2[14], 0x03, 0x00);
+                uint8_t icmp_hdr = icmp_t3(&packet_copy2[14], 0x03, 0x01);
 
                 /* Make the Ethernet Header. */
                 struct sr_if * return_iface = sr_get_interface(sr, packet->iface);
