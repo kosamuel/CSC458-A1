@@ -59,45 +59,45 @@ void handle_arpreq(struct sr_instance *sr, struct sr_arpreq* req) {
         if (req->times_sent >= 5) {
             
             for (packet = req->packets; packet != NULL; packet = packet->next) {
-		
-
-                /* Get IP information. */
-                uint8_t src_addr_copy[4];
-                memcpy(src_addr_copy, &packet[26], 4);
-                uint32_t des_addr = bit_size_conversion(src_addr_copy);
-                struct sr_arpentry* destination = sr_arpcache_lookup(&sr->cache, des_addr);
-
-                /* Make the ICMP header. */
-                uint8_t packet_copy2[packet->len];
-                memcpy(packet_copy2, packet, packet->len);
-                uint8_t icmp_hdr = icmp_t3(&packet_copy2[14], 0x03, 0x01);
-
-                /* Make the Ethernet Header. */
-                struct sr_if * return_iface = sr_get_interface(sr, packet->iface);
-                struct sr_ethernet_hdr ether;
+		        //void send_icmp(sr, &packet->buf, packet->len, packet->iface, 0x03, 0x01);
                 
-                memcpy(ether.ether_dhost, destination->mac, ETHER_ADDR_LEN);
-                memcpy(ether.ether_shost, return_iface->addr, ETHER_ADDR_LEN);
-                ether.ether_type = htons(0x0800);
+                // /* Get IP information. */
+                // uint8_t src_addr_copy[4];
+                // memcpy(src_addr_copy, &packet->buf[26], 4);
+                // uint32_t des_addr = bit_size_conversion(src_addr_copy);
+                // struct sr_arpentry* destination = sr_arpcache_lookup(&sr->cache, des_addr);
 
-                /* Update IP information. */
-                uint8_t source_ip[4]; 
-                source_ip[0] = return_iface->ip >> 24;
-                source_ip[1] = (return_iface->ip << 8) >> 24;
-                source_ip[2] = (return_iface->ip << 16) >> 24;
-                source_ip[3] = (return_iface->ip << 24) >> 24;
+                // /* Make the ICMP header. */
+                // uint8_t packet_copy2[packet->len];
+                // memcpy(packet_copy2, &packet->buf, packet->len);
+                // uint8_t icmp_hdr = icmp_t3(&packet_copy2[14], 0x03, 0x01);
+
+                // /* Make the Ethernet Header. */
+                // struct sr_if * return_iface = sr_get_interface(sr, packet->iface);
+                // struct sr_ethernet_hdr ether;
+                
+                // memcpy(ether.ether_dhost, destination->mac, ETHER_ADDR_LEN);
+                // memcpy(ether.ether_shost, return_iface->addr, ETHER_ADDR_LEN);
+                // ether.ether_type = htons(0x0800);
+
+                // /* Update IP information. */
+                // uint8_t source_ip[4]; 
+                // source_ip[0] = return_iface->ip >> 24;
+                // source_ip[1] = (return_iface->ip << 8) >> 24;
+                // source_ip[2] = (return_iface->ip << 16) >> 24;
+                // source_ip[3] = (return_iface->ip << 24) >> 24;
          
-                memcpy(&packet_copy2[26], source_ip, 4);
-                memcpy(&packet_copy2[30], src_addr_copy, 4);
+                // memcpy(&packet_copy2[26], source_ip, 4);
+                // memcpy(&packet_copy2[30], src_addr_copy, 4);
 
-                /* Make the packet. */
-                uint8_t buf[sizeof(ether) + sizeof(&packet_copy2[14]) + sizeof(icmp_hdr)];
-                memcpy(buf, &ether, sizeof(ether));
-                memcpy(&buf[sizeof(ether)], &packet_copy2[14], sizeof(packet_copy2) - sizeof(ether));
-                memcpy(&buf[sizeof(ether) + sizeof(&packet_copy2[14])], &icmp_hdr, sizeof(icmp_hdr));
+                // /* Make the packet. */
+                // uint8_t buf[sizeof(ether) + sizeof(&packet_copy2[14]) + sizeof(icmp_hdr)];
+                // memcpy(buf, &ether, sizeof(ether));
+                // memcpy(&buf[sizeof(ether)], &packet_copy2[14], sizeof(packet_copy2) - sizeof(ether));
+                // memcpy(&buf[sizeof(ether) + sizeof(&packet_copy2[14])], &icmp_hdr, sizeof(icmp_hdr));
 
-                sr_send_packet(sr, buf, sizeof(&buf), return_iface->name);
-
+                // sr_send_packet(sr, buf, sizeof(&buf), return_iface->name);
+                
             }
 
 

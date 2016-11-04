@@ -67,6 +67,50 @@ uint16_t bit_size_conversion16(uint8_t bytes[2]) {
   return sixteen;
 }
 
+void send_icmp(struct sr_instance* sr, 
+               uint8_t * packet,
+               unsigned int len,
+               char* interface, 
+               uint8_t code, 
+               uint8_t type) {
+    /* Get IP information. */
+  uint8_t src_addr_copy[4];
+  memcpy(src_addr_copy, &packet[26], 4);
+  uint32_t des_addr = bit_size_conversion(src_addr_copy);
+  struct sr_arpentry* destination = sr_arpcache_lookup(&sr->cache, des_addr);
+
+  /* Make the ICMP header. */
+  uint8_t packet_copy2[len];
+  memcpy(packet_copy2, packet, len);
+  uint8_t icmp_hdr = icmp_t3(&packet_copy2[14], code, type);
+
+  /* Make the Ethernet Header. */
+  struct sr_if * return_iface = sr_get_interface(sr, interface);
+  struct sr_ethernet_hdr ether;
+  
+  memcpy(ether.ether_dhost, destination->mac, ETHER_ADDR_LEN);
+  memcpy(ether.ether_shost, return_iface->addr, ETHER_ADDR_LEN);
+  ether.ether_type = htons(0x0800);
+
+  /* Update IP information. */
+  uint8_t source_ip[4]; 
+  source_ip[0] = return_iface->ip >> 24;
+  source_ip[1] = (return_iface->ip << 8) >> 24;
+  source_ip[2] = (return_iface->ip << 16) >> 24;
+  source_ip[3] = (return_iface->ip << 24) >> 24;
+
+  memcpy(&packet_copy2[26], source_ip, 4);
+  memcpy(&packet_copy2[30], src_addr_copy, 4);
+
+  /* Make the packet. */
+  uint8_t buf[sizeof(ether) + sizeof(&packet_copy2[14]) + sizeof(icmp_hdr)];
+  memcpy(buf, &ether, sizeof(ether));
+  memcpy(&buf[sizeof(ether)], &packet_copy2[14], sizeof(packet_copy2) - sizeof(ether));
+  memcpy(&buf[sizeof(ether) + sizeof(&packet_copy2[14])], &icmp_hdr, sizeof(icmp_hdr));
+
+  sr_send_packet(sr, buf, sizeof(&buf), return_iface->name);
+}
+
 void handle_arppacket(struct sr_instance* sr,
                       uint8_t * packet, 
                       unsigned int len,
@@ -225,44 +269,46 @@ void handle_ippacket(struct sr_instance* sr,
   if (memcmp(&des_addr32, &this_ip, 4) == 0) {
     printf("Successfully compared addresses: Line 164\n");
     /* If it is an ICMP echo request. */
-    /* Get IP information. */
-    uint8_t src_addr_copy[4];
-    memcpy(src_addr_copy, &packet[26], 4);
-    uint32_t des_addr = bit_size_conversion(src_addr_copy);
-    struct sr_arpentry* destination = sr_arpcache_lookup(&sr->cache, des_addr);
+    if (packet[34] == 0x08 && packet[35] == 0x00){
 
-    /* Make the ICMP header. */
-    uint8_t packet_copy2[len];
-    memcpy(packet_copy2, packet, len);
-    uint8_t icmp_hdr = icmp_t3(&packet_copy2[14], 0x00, 0x00);
+      /* Get IP information. */
+      uint8_t src_addr_copy[4];
+      memcpy(src_addr_copy, &packet[26], 4);
+      uint32_t des_addr = bit_size_conversion(src_addr_copy);
+      struct sr_arpentry* destination = sr_arpcache_lookup(&sr->cache, des_addr);
 
-    /* Make the Ethernet Header. */
-    struct sr_if * return_iface = sr_get_interface(sr, interface);
-    struct sr_ethernet_hdr ether;
-    
-    memcpy(ether.ether_dhost, destination->mac, ETHER_ADDR_LEN);
-    memcpy(ether.ether_shost, return_iface->addr, ETHER_ADDR_LEN);
-    ether.ether_type = htons(0x0800);
+      /* Make the ICMP header. */
+      uint8_t packet_copy2[len];
+      memcpy(packet_copy2, packet, len);
+      uint8_t icmp_hdr = icmp_t3(&packet_copy2[14], 0x00, 0x00);
 
-    /* Update IP information. */
-    uint8_t source_ip[4]; 
-    source_ip[0] = return_iface->ip >> 24;
-    source_ip[1] = (return_iface->ip << 8) >> 24;
-    source_ip[2] = (return_iface->ip << 16) >> 24;
-    source_ip[3] = (return_iface->ip << 24) >> 24;
+      /* Make the Ethernet Header. */
+      struct sr_if * return_iface = sr_get_interface(sr, interface);
+      struct sr_ethernet_hdr ether;
+      
+      memcpy(ether.ether_dhost, destination->mac, ETHER_ADDR_LEN);
+      memcpy(ether.ether_shost, return_iface->addr, ETHER_ADDR_LEN);
+      ether.ether_type = htons(0x0800);
 
-    memcpy(&packet_copy2[26], source_ip, 4);
-    memcpy(&packet_copy2[30], src_addr_copy, 4);
+      /* Update IP information. */
+      uint8_t source_ip[4]; 
+      source_ip[0] = return_iface->ip >> 24;
+      source_ip[1] = (return_iface->ip << 8) >> 24;
+      source_ip[2] = (return_iface->ip << 16) >> 24;
+      source_ip[3] = (return_iface->ip << 24) >> 24;
 
-    /* Make the packet. */
-    uint8_t buf[sizeof(ether) + sizeof(&packet_copy2[14]) + sizeof(icmp_hdr)];
-    memcpy(buf, &ether, sizeof(ether));
-    memcpy(&buf[sizeof(ether)], &packet_copy2[14], sizeof(packet_copy2) - sizeof(ether));
-    memcpy(&buf[sizeof(ether) + sizeof(&packet_copy2[14])], &icmp_hdr, sizeof(icmp_hdr));
+      memcpy(&packet_copy2[26], source_ip, 4);
+      memcpy(&packet_copy2[30], src_addr_copy, 4);
 
-    sr_send_packet(sr, buf, sizeof(&buf), return_iface->name);
+      /* Make the packet. */
+      uint8_t buf[sizeof(ether) + sizeof(&packet_copy2[14]) + sizeof(icmp_hdr)];
+      memcpy(buf, &ether, sizeof(ether));
+      memcpy(&buf[sizeof(ether)], &packet_copy2[14], sizeof(packet_copy2) - sizeof(ether));
+      memcpy(&buf[sizeof(ether) + sizeof(&packet_copy2[14])], &icmp_hdr, sizeof(icmp_hdr));
 
+      sr_send_packet(sr, buf, sizeof(&buf), return_iface->name);
 
+    }
   } else {
     /* Check routing table. */
     struct sr_rt *rtable;
@@ -341,42 +387,7 @@ void handle_ippacket(struct sr_instance* sr,
       
       /* There were no matches. */
       } else {
-        /* Get IP information. */
-        uint8_t src_addr_copy[4];
-        memcpy(src_addr_copy, &packet[26], 4);
-        uint32_t des_addr = bit_size_conversion(src_addr_copy);
-        struct sr_arpentry* destination = sr_arpcache_lookup(&sr->cache, des_addr);
-
-        /* Make the ICMP header. */
-        uint8_t packet_copy2[len];
-        memcpy(packet_copy2, packet, len);
-        uint8_t icmp_hdr = icmp_t3(&packet_copy2[14], 0x03, 0x00);
-
-        /* Make the Ethernet Header. */
-        struct sr_if * return_iface = sr_get_interface(sr, interface);
-        struct sr_ethernet_hdr ether;
-        
-        memcpy(ether.ether_dhost, destination->mac, ETHER_ADDR_LEN);
-        memcpy(ether.ether_shost, return_iface->addr, ETHER_ADDR_LEN);
-        ether.ether_type = htons(0x0800);
-
-        /* Update IP information. */
-        uint8_t source_ip[4]; 
-        source_ip[0] = return_iface->ip >> 24;
-        source_ip[1] = (return_iface->ip << 8) >> 24;
-        source_ip[2] = (return_iface->ip << 16) >> 24;
-        source_ip[3] = (return_iface->ip << 24) >> 24;
- 
-        memcpy(&packet_copy2[26], source_ip, 4);
-        memcpy(&packet_copy2[30], src_addr_copy, 4);
-
-        /* Make the packet. */
-        uint8_t buf[sizeof(ether) + sizeof(&packet_copy2[14]) + sizeof(icmp_hdr)];
-        memcpy(buf, &ether, sizeof(ether));
-        memcpy(&buf[sizeof(ether)], &packet_copy2[14], sizeof(packet_copy2) - sizeof(ether));
-        memcpy(&buf[sizeof(ether) + sizeof(&packet_copy2[14])], &icmp_hdr, sizeof(icmp_hdr));
-
-        sr_send_packet(sr, buf, sizeof(&buf), return_iface->name);
+        send_icmp(sr, packet, len, interface, 0x03, 0x00);
 
       }
     free(longest_prefix);  
