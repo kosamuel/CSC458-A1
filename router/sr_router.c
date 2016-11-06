@@ -187,7 +187,7 @@ void handle_arppacket(struct sr_instance* sr,
         /* Update checksum and TTL. */
       	uint8_t ip_len8[2];
         memcpy(ip_len8, &rpacket->buf[16], 2);
-        int ip_len = htons(bit_size_conversion(ip_len8));
+        int ip_len = htons(bit_size_conversion16(ip_len8));
 
         rpacket->buf[22] = rpacket->buf[22] - 1;
 
@@ -282,10 +282,11 @@ void handle_ippacket(struct sr_instance* sr,
   /*if (1) {*/
     printf("Successfully compared addresses: Line 164\n");
 
-    if (1) {
-    /*if (packet[23] == 0x01) {*/
-      /*if (packet[34] == 0x08 && packet[35] == 0x00) {*/
-      if (1) {
+    /*if (1) {*/
+    if (packet[23] == 0x01) {
+      if (packet[34] == 0x08 && packet[35] == 0x00) {
+      /*if (1) {*/
+        struct sr_if * return_iface = sr_get_interface(sr, interface);
 
         uint8_t packet_copy2[len];
         memcpy(packet_copy2, packet, len);
@@ -303,7 +304,7 @@ void handle_ippacket(struct sr_instance* sr,
 
         int icmp_len = sizeof(packet_copy2) - 34;
 
-        uint16_t icmp_checksum = htons(cksum(&packet[34], icmp_len));
+        uint16_t icmp_checksum = htons(cksum(&packet_copy2[34], icmp_len));
         uint8_t icmp_checksum0 = icmp_checksum >> 8;
         uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
         
@@ -322,7 +323,7 @@ void handle_ippacket(struct sr_instance* sr,
         
         uint8_t ip_len8[2];
         memcpy(ip_len8, &packet_copy2[16], 2);
-        int ip_len = htons(bit_size_conversion(ip_len8));
+        int ip_len = htons(bit_size_conversion16(ip_len8));
 
 
 
@@ -342,8 +343,8 @@ void handle_ippacket(struct sr_instance* sr,
     /*} else if (packet[23] == 0x06 || packet[23] == 0x11) {*/
     } else {
       
-        uint8_t packet_copy2[len];
-        memcpy(packet_copy2, packet, len);
+        uint8_t packet_copy2[len + 4];
+        memcpy(packet_copy2, packet, 34);
 
         uint8_t src_addr_copy[4];
         memcpy(src_addr_copy, &packet[26], 4); /* Copy of packet source ip */
@@ -352,13 +353,14 @@ void handle_ippacket(struct sr_instance* sr,
         packet_copy2[34] = 0x03;  
         packet_copy2[35] = 0x03;
 
-
         packet_copy2[36] = 0x00;
         packet_copy2[37] = 0x00;
 
+        memcpy(&packet_copy2[38], &packet[34], len - 34);
+
         int icmp_len = sizeof(packet_copy2) - 34;
 
-        uint16_t icmp_checksum = htons(cksum(&packet[34], icmp_len));
+        uint16_t icmp_checksum = htons(cksum(&packet_copy2[34], icmp_len));
         uint8_t icmp_checksum0 = icmp_checksum >> 8;
         uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
         
@@ -377,14 +379,14 @@ void handle_ippacket(struct sr_instance* sr,
         
         uint8_t ip_len8[2];
         memcpy(ip_len8, &packet_copy2[16], 2);
-        int ip_len = htons(bit_size_conversion(ip_len8));
+        int ip_len = htons(bit_size_conversion16(ip_len8));
 
 
 
         packet_copy2[24] = 0x00;
         packet_copy2[25] = 0x00;
 
-        uint16_t new_checksum = htons(cksum(&packet_copy2[14], ip_len));
+        uint16_t new_checksum = htons(cksum(&packet_copy2[14], ip_len + 4));
         uint8_t new_checksum0 = new_checksum >> 8;
         uint8_t new_checksum1 = (new_checksum << 8) >> 8;
         packet_copy2[24] = new_checksum0;
