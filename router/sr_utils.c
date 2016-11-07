@@ -36,25 +36,20 @@ struct sr_icmp_hdr *icmp_header(struct sr_ip_hdr *ip_hdr){
 }
 
 uint8_t * icmp_t3(uint8_t *payload, int len, uint8_t type, uint8_t code) {
-    static uint8_t buf[36];    
-    
-    /* Set up the ICMP header. */
-    struct sr_icmp_hdr icmp_response;
-    icmp_response.icmp_type = type;
-    icmp_response.icmp_code = code;
-    icmp_response.icmp_sum = 0x0000;
-   
-    /* Write to buf */
-    memcpy(buf, &icmp_response, sizeof(icmp_response));
 
     if (type == 0x03) {
-      buf[4] = 0x00;
-      buf[5] = 0x00;
-      buf[6] = 0x00;
-      buf[7] = 0x00;
+      static uint8_t buf[36];    
+
+      /* Set up the ICMP header. */
+      struct sr_icmp_t3_hdr icmp_response;
+      icmp_response.icmp_type = type;
+      icmp_response.icmp_code = code;
+      icmp_response.icmp_sum = 0x0000;
+      icmp_response.unused = 0x0000;
+      icmp_response.next_mtu = 0x0000;
+      memcpy(icmp_response.data, payload, 28);
  
-      /* Should be the IP packet */
-      memcpy(&buf[8], payload, 28);
+      memcpy(buf, icmp_response, 36);
 
       /* Perform Checksum */
       uint16_t icmp_checksum = htons(cksum(buf, 36));
@@ -62,21 +57,34 @@ uint8_t * icmp_t3(uint8_t *payload, int len, uint8_t type, uint8_t code) {
       uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
       buf[2] = icmp_checksum0;
       buf[3] = icmp_checksum1;
+
+      return buf;
+
     } else if (type == 0x00) {
+      static uint8_t buf[8];
+
+      struct sr_icmp_hdr icmp_response;
+      icmp_response.icmp_type = type;
+      icmp_response.icmp_code = code;
+      buf[4] = 0x00;
+      buf[5] = 0x00;
+      buf[6] = 0x00;
+      buf[7] = 0x00;
+
       /* Should contain information on the echo request */
-      memcpy(&buf[4], payload, len);
+      memcpy(buf, icmp_response, 4);
 
       /* Perform Checksum */
-      uint16_t icmp_checksum = htons(cksum(buf, len + 4));
+      uint16_t icmp_checksum = htons(cksum(buf, 8));
       uint8_t icmp_checksum0 = icmp_checksum >> 8;
       uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
       buf[2] = icmp_checksum0;
       buf[3] = icmp_checksum1;
 
-    }
+      return buf;
 
-    return buf;
-  
+    }
+      
 }
 
 /* Prints out formatted Ethernet address, e.g. 00:11:22:33:44:55 */

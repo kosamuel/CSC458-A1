@@ -83,13 +83,13 @@ void send_icmp(struct sr_instance* sr,
   /* Update total length */
   uint8_t len_in_packet[2];
   memcpy(len_in_packet, &packet[16], 2);
-  int ip_len = htons(bit_size_conversion(len_in_packet)) + 4;
+  int ip_len = htons(bit_size_conversion(len_in_packet)) + 8;
   packet[16] = (ip_len) >> 8;
   packet[17] = (ip_len);
 
   printf("ip_len after changes: %d-%d\n", packet[16], packet[17]);
 
-  uint8_t buf[len + 4];
+  uint8_t buf[len + 8];
   printf("ICMP type: %d\n", icmp_hdr[0]);
 
   printf("First 3 bytes of the packet in icmp: %d-%d-%d-%d-%d\n", icmp_hdr[8],
@@ -118,13 +118,6 @@ void send_icmp(struct sr_instance* sr,
   memcpy(&packet[26], &this_if->ip, 4);
   memcpy(&packet[30], packet_owner_ip, 4);
 
-  /* IP Checksum */
-  uint16_t new_checksum = htons(cksum(&packet[14], ip_len));
-  uint8_t new_checksum0 = new_checksum >> 8;
-  uint8_t new_checksum1 = (new_checksum << 8) >> 8;
-  packet[24] = new_checksum0;
-  packet[25] = new_checksum1;
-
   printf("packet_owner_mac: %d:%d:%d:%d:%d:%d\n", packet[6],
 						packet[7],
 						packet[8],
@@ -145,6 +138,13 @@ void send_icmp(struct sr_instance* sr,
   memcpy(buf, packet_owner_mac, ETHER_ADDR_LEN);
   memcpy(&buf[6], &this_if->addr, ETHER_ADDR_LEN);
   memcpy(&buf[34], icmp_hdr, ip_len - 20);
+
+  /* IP Checksum */
+  uint16_t new_checksum = htons(cksum(&buf[14], ip_len));
+  uint8_t new_checksum0 = new_checksum >> 8;
+  uint8_t new_checksum1 = (new_checksum << 8) >> 8;
+  buf[24] = new_checksum0;
+  buf[25] = new_checksum1;
 
   printf("new dest mac: %d:%d:%d:%d:%d:%d\n", buf[0],
 						buf[1],
