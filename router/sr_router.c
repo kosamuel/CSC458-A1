@@ -77,7 +77,7 @@ void send_icmp(struct sr_instance* sr,
   printf("ip_len before changes: %d-%d\n", packet[16], packet[17]);
   
   /* Create ICMP header first */
-  uint8_t *icmp_hdr = icmp_t3(&packet[14], len - 14, type, code);
+  uint8_t *icmp_hdr = icmp_t3(&packet[14], type, code);
   
   /* Update IP packet next */
   /* Update total length */
@@ -316,6 +316,12 @@ void handle_ippacket(struct sr_instance* sr,
 
   } else if (packet_copy[22] == 0) {
     printf("TTL is 0");
+
+    uint8_t packet_copy2[len];
+    memcpy(packet_copy2, packet, len);
+
+    send_icmp(sr, packet_copy2, len, interface, 0x0B, 0x00);
+
     return;  
 
   }
@@ -331,121 +337,26 @@ void handle_ippacket(struct sr_instance* sr,
 
   /* If the packet is for this router. */
   if (memcmp(&des_addr32, &this_ip, 4) == 0) {
-  /*if (1) {*/
     printf("Successfully compared addresses: Line 164\n");
 
-    /*if (1) {*/
     if (packet[23] == 0x01) {
       if (packet[34] == 0x08 && packet[35] == 0x00) {
-      /*if (1) {*/
-        /*struct sr_if * return_iface = sr_get_interface(sr, interface);*/
 
         uint8_t packet_copy2[len];
         memcpy(packet_copy2, packet, len);
 
-        uint8_t src_addr_copy[4];
-        memcpy(src_addr_copy, &packet[26], 4); /* Copy of packet source ip */
-        
+        send_icmp(sr, packet_copy2, len, interface, 0x00, 0x00);
 
-        packet_copy2[34] = 0x00;  
-        packet_copy2[35] = 0x00;
-
-
-        packet_copy2[36] = 0x00;
-        packet_copy2[37] = 0x00;
-
-        int icmp_len = sizeof(packet_copy2) - 34;
-
-        uint16_t icmp_checksum = htons(cksum(&packet_copy2[34], icmp_len));
-        uint8_t icmp_checksum0 = icmp_checksum >> 8;
-        uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
-        
-        packet_copy2[36] = icmp_checksum0;
-        packet_copy2[37] = icmp_checksum1;
-
-
-        uint8_t dst_mac_copy[6];
-        memcpy(dst_mac_copy, &packet[0], ETHER_ADDR_LEN);
-        memcpy(packet_copy2, &packet[6], ETHER_ADDR_LEN);
-        memcpy(&packet_copy2[6], &dst_mac_copy, ETHER_ADDR_LEN);
-        
-        memcpy(&packet_copy2[26], &this_ip, 4);
-        memcpy(&packet_copy2[30], &src_addr_copy, 4);
-
-        
-        uint8_t ip_len8[2];
-        memcpy(ip_len8, &packet_copy2[16], 2);
-        int ip_len = htons(bit_size_conversion16(ip_len8));
-
-
-
-        packet_copy2[24] = 0x00;
-        packet_copy2[25] = 0x00;
-
-        uint16_t new_checksum = htons(cksum(&packet_copy2[14], ip_len));
-        uint8_t new_checksum0 = new_checksum >> 8;
-        uint8_t new_checksum1 = (new_checksum << 8) >> 8;
-        packet_copy2[24] = new_checksum0;
-        packet_copy2[25] = new_checksum1;
-            
-        
-        sr_send_packet(sr, packet_copy2, sizeof(packet_copy2), interface);
       }
 
     /*} else if (packet[23] == 0x06 || packet[23] == 0x11) {*/
     } else {
       
-        uint8_t packet_copy2[len + 4];
-        memcpy(packet_copy2, packet, 34);
+      uint8_t packet_copy2[len];
+      memcpy(packet_copy2, packet, len);
 
-        uint8_t src_addr_copy[4];
-        memcpy(src_addr_copy, &packet[26], 4); /* Copy of packet source ip */
-        
+      send_icmp(sr, packet_copy2, len, interface, 0x03, 0x03);
 
-        packet_copy2[34] = 0x03;  
-        packet_copy2[35] = 0x03;
-
-        packet_copy2[36] = 0x00;
-        packet_copy2[37] = 0x00;
-
-        memcpy(&packet_copy2[38], &packet[34], len - 34);
-
-        int icmp_len = sizeof(packet_copy2) - 34;
-
-        uint16_t icmp_checksum = htons(cksum(&packet_copy2[34], icmp_len));
-        uint8_t icmp_checksum0 = icmp_checksum >> 8;
-        uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
-        
-        packet_copy2[36] = icmp_checksum0;
-        packet_copy2[37] = icmp_checksum1;
-
-
-        uint8_t dst_mac_copy[6];
-        memcpy(dst_mac_copy, &packet[0], ETHER_ADDR_LEN);
-        memcpy(packet_copy2, &packet[6], ETHER_ADDR_LEN);
-        memcpy(&packet_copy2[6], &dst_mac_copy, ETHER_ADDR_LEN);
-        
-        memcpy(&packet_copy2[26], &this_ip, 4);
-        memcpy(&packet_copy2[30], &src_addr_copy, 4);
-
-        
-        uint8_t ip_len8[2];
-        memcpy(ip_len8, &packet_copy2[16], 2);
-        int ip_len = htons(bit_size_conversion16(ip_len8));
-
-
-
-        packet_copy2[24] = 0x00;
-        packet_copy2[25] = 0x00;
-
-        uint16_t new_checksum = htons(cksum(&packet_copy2[14], ip_len + 4));
-        uint8_t new_checksum0 = new_checksum >> 8;
-        uint8_t new_checksum1 = (new_checksum << 8) >> 8;
-        packet_copy2[24] = new_checksum0;
-        packet_copy2[25] = new_checksum1;
-            
-        
-        sr_send_packet(sr, packet_copy2, sizeof(packet_copy2), interface);
     }
 
   } else {

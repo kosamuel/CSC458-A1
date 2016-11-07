@@ -61,7 +61,10 @@ void handle_arpreq(struct sr_instance *sr, struct sr_arpreq* req) {
             for (packet = req->packets; packet != NULL; packet = packet->next) {
 		        /*send_icmp(sr, packet->buf, packet->len, packet->iface, 0x03, 0x01);*/
                 
+                uint8_t packet_copy[len];
+                memcpy(packet_copy, packet, len);
 
+                send_icmp(sr, packet_copy, len, interface, 0x03, 0x01);
                 
             }
 
