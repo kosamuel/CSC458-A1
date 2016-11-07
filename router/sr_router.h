@@ -73,8 +73,8 @@ void send_icmp(struct sr_instance* sr,
                uint8_t * packet,
                unsigned int len,
                char* interface, 
-               uint8_t code, 
-               uint8_t type);
+               uint8_t type, 
+               uint8_t code);
 
 /* -- sr_if.c -- */
 void sr_add_interface(struct sr_instance* , const char* );

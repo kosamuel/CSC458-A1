@@ -35,17 +35,21 @@ struct sr_icmp_hdr *icmp_header(struct sr_ip_hdr *ip_hdr){
   return (struct sr_icmp_hdr *)((uint8_t *)(ip_hdr) + 16);
 }
 
-uint8_t * icmp_t3(uint8_t *ip_packet, uint8_t code, uint8_t type) {
-  static uint8_t buf[sizeof(struct sr_icmp_hdr)];
+uint8_t * icmp_t3(uint8_t *payload, int len, uint8_t type, uint8_t code) {
+  static uint8_t buf[sizeof(struct sr_icmp_hdr) + len];
 
   /* Set up the ICMP header. */
   struct sr_icmp_hdr icmp_response;
   icmp_response.icmp_type = type;
   icmp_response.icmp_code = code;
-  icmp_response.icmp_sum = 0x00;
-  memcpy(buf, &icmp_response, sizeof(icmp_response));
+  icmp_response.icmp_sum = 0x0000;
 
-  uint16_t icmp_checksum = htons(cksum(buf, sizeof(sr_icmp_t3_hdr_t)));
+  /* Write to array */
+  memcpy(buf, &icmp_response, sizeof(icmp_response));
+  memcpy(&buf[4], payload, len);
+
+  /* Perform Checksum */
+  uint16_t icmp_checksum = htons(cksum(buf, sizeof(sr_icmp_t3_hdr_t) + len));
   uint8_t icmp_checksum0 = icmp_checksum >> 8;
   uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
   buf[2] = icmp_checksum0;
