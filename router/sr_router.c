@@ -595,7 +595,7 @@ void handle_ippacket(struct sr_instance* sr,
     /* There were no matches. */
     } else {
       uint8_t packet_copy2[len];
-      memcpy(packet_copy2, packet, 34);
+      memcpy(packet_copy2, packet, len);
 
       send_icmp(sr, packet_copy2, len, interface, 0x03, 0x00);
 
