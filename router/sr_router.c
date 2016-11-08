@@ -77,13 +77,25 @@ void send_icmp(struct sr_instance* sr,
   printf("ip_len before changes: %d-%d\n", packet[16], packet[17]);
   
   /* Create ICMP header first */
-  uint8_t *icmp_hdr = icmp_t3(&packet[14], type, code);
+  uint8_t *icmp_hdr;
+  if (type == 0x00) {
+    icmp_hdr = icmp_t3(&packet[42], type, code);
+  } else if (type == 0x03 || type == 0x0B) {
+    icmp_hdr = icmp_t3(&packet[14], type, code);
+
+  }
   
   /* Update IP packet next */
   /* Update total length */
   uint8_t len_in_packet[2];
   memcpy(len_in_packet, &packet[16], 2);
-  int ip_len = htons(bit_size_conversion(len_in_packet)) + 8;
+  int ip_len;
+  if (type == 0x00) {
+    ip_len = htons(bit_size_conversion(len_in_packet));
+  } else {
+    ip_len = htons(bit_size_conversion(len_in_packet)) + 8;
+  }
+
   packet[16] = (ip_len) >> 8;
   packet[17] = (ip_len);
 
@@ -340,116 +352,125 @@ void handle_ippacket(struct sr_instance* sr,
   /* Get the receiving interface's IP */
   uint32_t this_ip = sr_get_interface(sr, interface)->ip;
 
+
   /* If the packet is for this router. */
-  if (memcmp(&des_addr32, &this_ip, 4) == 0) {
-    printf("Successfully compared addresses: Line 164\n");
+  struct sr_if *iface;
+  for (iface = sr->if_list; iface != NULL; iface = iface->next) {
+    if (memcmp(&des_addr32, &iface->ip, 4) == 0) {
+      printf("Successfully compared addresses: Line 164\n");
 
-    /* It is an echo request */
-    if (packet[23] == 0x01) {
-      if (packet[34] == 0x08 && packet[35] == 0x00) {
+      /* It is an echo request */
+      /*if (packet[23] == 0x01) {*/
+      if (1) {
+        /*if (packet[34] == 0x08 && packet[35] == 0x00) {*/
 
+          uint8_t packet_copy2[len];
+          memcpy(packet_copy2, packet, len);
+
+          send_icmp(sr, packet_copy2, len, interface, 0x00, 0x00);
+          return;
+        /*}*/
+
+      /* It is an UDP or TCP packet */
+      } else if (packet[23] == 0x06 || packet[23] == 0x11) {
+        
         uint8_t packet_copy2[len];
         memcpy(packet_copy2, packet, len);
 
-        send_icmp(sr, packet_copy2, len, interface, 0x00, 0x00);
-
+        send_icmp(sr, packet_copy2, len, interface, 0x03, 0x03);
+        return;
       }
-
-    /* It is an UDP or TCP packet */
-    } else if (packet[23] == 0x06 || packet[23] == 0x11) {
-      
-      uint8_t packet_copy2[len];
-      memcpy(packet_copy2, packet, len);
-
-      send_icmp(sr, packet_copy2, len, interface, 0x03, 0x03);
-
     }
+  }
+  
 
   /* The packet is not for here and needs to be redirected */
-  } else {
-    /* Check routing table. */
-    struct sr_rt *rtable;
-    char ip_string[9];
+  /* Check routing table. */
+  struct sr_rt *rtable;
+  char ip_string[9];
 
-    /* Convert the ip address into a string */
-    sprintf(ip_string, "%d.%d.%d.%d", des_addr[0], des_addr[1],
-                                      des_addr[2], des_addr[3]);
+  /* Convert the ip address into a string */
+  sprintf(ip_string, "%d.%d.%d.%d", des_addr[0], des_addr[1],
+                                    des_addr[2], des_addr[3]);
 
-    /* Initialize variables for Longest Prefix Matching */
-    int len_longest_prefix = 0;
-    /* char *longest_prefix = malloc(sizeof(char) * 1024); */
-    char longest_prefix[128]; 
-    strncpy(longest_prefix, "None", 5);
-    struct sr_rt *outgoing;
+  /* Initialize variables for Longest Prefix Matching */
+  int len_longest_prefix = 0;
+  /* char *longest_prefix = malloc(sizeof(char) * 1024); */
+  char longest_prefix[128]; 
+  strncpy(longest_prefix, "None", 5);
+  struct sr_rt *outgoing;
 
-    /* For each routing table entry. */
-    for (rtable = sr->routing_table; rtable != NULL; rtable = rtable->next) {
-      printf("Prefix %s\n", inet_ntoa(rtable->dest));
-      printf("Destination IP %s\n", ip_string);
-      
-      if (sizeof(inet_ntoa(rtable->dest)) > len_longest_prefix &&
-         strncmp(inet_ntoa(rtable->dest), ip_string, sizeof(ip_string) - 1) == 0) {
-         
-         strncpy(longest_prefix, inet_ntoa(rtable->dest), sizeof(inet_ntoa(rtable->dest)));
-         len_longest_prefix = sizeof(inet_ntoa(rtable->dest));
-         outgoing = rtable;
-     
-      }
+  /* For each routing table entry, compare prefixes and keep the longest match. */
+  for (rtable = sr->routing_table; rtable != NULL; rtable = rtable->next) {
+    printf("Prefix %s\n", inet_ntoa(rtable->dest));
+    printf("Destination IP %s\n", ip_string);
+    
+    /* Compare IP addresses.  Both are in a.b.c.d format. */
+    if (sizeof(inet_ntoa(rtable->dest)) > len_longest_prefix &&
+       strncmp(inet_ntoa(rtable->dest), ip_string, sizeof(ip_string) - 1) == 0) {
+       
+       strncpy(longest_prefix, inet_ntoa(rtable->dest), sizeof(inet_ntoa(rtable->dest)));
+       len_longest_prefix = sizeof(inet_ntoa(rtable->dest));
+       outgoing = rtable;  /* Set the rtable entry as the current outgoing interface */
+   
     }
+  }
 
-      /* Check longest prefix match with the IP address above. */
-      if (strncmp(longest_prefix, "None", 5) != 0) {
-        struct sr_arpentry *arpentry = sr_arpcache_lookup(&sr->cache, des_addr32);	
+    /* Check if the longest prefix was found */
+    if (strncmp(longest_prefix, "None", 5) != 0) {
+      /* Check if the MAC to IP entry is in the cache */
+      struct sr_arpentry *arpentry = sr_arpcache_lookup(&sr->cache, des_addr32);	
 
-        /* If the arp was a miss. */
-        if (arpentry == NULL) {
-          printf("xxxxxxxxxxxxxxxxxxxxxxxxQueuing request: Line 187\n");
-          sr_arpcache_queuereq(&sr->cache, des_addr32, packet_copy, len, outgoing->interface);
-          printf("Finished queuing request: Line 189\n");
+      /* If the arp was a miss. */
+      if (arpentry == NULL) {
+        printf("xxxxxxxxxxxxxxxxxxxxxxxxQueuing request: Line 187\n");
+        sr_arpcache_queuereq(&sr->cache, des_addr32, packet_copy, len, outgoing->interface);
+        printf("Finished queuing request: Line 189\n");
 
-        } else {
-          printf("***************Redirecting packet: Line 192\n");
-
-          /* Update ethernet header before sending. */
-          struct sr_arpentry* destination = sr_arpcache_lookup(&sr->cache, des_addr32);
-          struct sr_if* this_mac = sr_get_interface(sr, outgoing->interface);
-          memcpy(packet_copy, destination->mac, 6);
-          memcpy(&packet_copy[6], this_mac->addr, 6);
-
-          /* Update checksum and TTL. */
-          printf("TTL before: %d\n", packet_copy[22]);
-          packet_copy[22] = packet_copy[22] - 1;
-          printf("TTL after: %d\n", packet_copy[22]);
-
-          /* Reset the checksum. */
-          packet_copy[24] = 0x00;
-	        packet_copy[25] = 0x00;
-
-          uint16_t new_checksum = htons(cksum(&packet_copy[14], ip_len));
-          uint8_t new_checksum0 = new_checksum >> 8;
-          uint8_t new_checksum1 = (new_checksum << 8) >> 8;
-          packet_copy[24] = new_checksum0;
-          packet_copy[25] = new_checksum1;
-          /* memcpy(&packet_copy[24], (uint8_t *)new_checksum, 2); */
-          printf("cksum in packet: %d%d\n", packet_copy[24], packet_copy[25]);
-          printf("Reverse cksum: %d\n", new_checksum);
-
-          sr_send_packet(sr, packet_copy, len, outgoing->interface);
-          printf("Finished redirecting packet: Line 194\n");
-
-        }
-      
-      /* There were no matches. */
+      /* Cache entry was found. */
       } else {
-        uint8_t packet_copy2[len];
-        memcpy(packet_copy2, packet, 34);
+        printf("***************Redirecting packet: Line 192\n");
 
-        send_icmp(sr, packet_copy2, len, interface, 0x03, 0x00);
+        /* Update ethernet header, TTL, and checksum before sending. */
+        /* des_addr32 is the uint32_t destination address for the packet */
+        /*struct sr_arpentry* destination = sr_arpcache_lookup(&sr->cache, des_addr32); */
+        struct sr_if* this_mac = sr_get_interface(sr, outgoing->interface);
+        memcpy(packet_copy, arpentry->mac, 6);
+        memcpy(&packet_copy[6], this_mac->addr, 6);
+
+        /* Update TTL. */
+        printf("TTL before: %d\n", packet_copy[22]);
+        packet_copy[22] = packet_copy[22] - 1;
+        printf("TTL after: %d\n", packet_copy[22]);
+
+        /* Reset the checksum. */
+        packet_copy[24] = 0x00;
+        packet_copy[25] = 0x00;
+
+        /* Recalculate checksum */
+        uint16_t new_checksum = htons(cksum(&packet_copy[14], ip_len));
+        uint8_t new_checksum0 = new_checksum >> 8;
+        uint8_t new_checksum1 = (new_checksum << 8) >> 8;
+        packet_copy[24] = new_checksum0;
+        packet_copy[25] = new_checksum1;
+        /* memcpy(&packet_copy[24], (uint8_t *)new_checksum, 2); */
+        printf("cksum in packet: %d%d\n", packet_copy[24], packet_copy[25]);
+        printf("Reverse cksum: %d\n", new_checksum);
+
+        sr_send_packet(sr, packet_copy, len, outgoing->interface);
+        printf("Finished redirecting packet: Line 194\n");
 
       }
-    /*free(longest_prefix); */ 
+    
+    /* There were no matches. */
+    } else {
+      uint8_t packet_copy2[len];
+      memcpy(packet_copy2, packet, 34);
 
-  }  
+      send_icmp(sr, packet_copy2, len, interface, 0x03, 0x00);
+
+    }
+  /*free(longest_prefix); */   
 }
 
 /* If the packet is not for this router. */

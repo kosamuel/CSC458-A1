@@ -40,14 +40,13 @@ void send_arp_packet(struct sr_instance* sr,
     
     unsigned int etherlen = sizeof(ether);
     unsigned int arplen = sizeof(arp);
-    uint8_t* buf = (uint8_t *) malloc(etherlen + arplen);
+    uint8_t* buf[etherlen + arplen];
     memcpy(buf, &ether, etherlen);
     memcpy(&buf[etherlen], &arp, arplen);
 
     sr_send_packet(sr, buf, etherlen+arplen, iface->name);
     printf("ethertype: %d", buf[12]);
     printf("%d\n", buf[13]);
-    free(buf);
 }
 
 void handle_arpreq(struct sr_instance *sr, struct sr_arpreq* req) {
@@ -57,23 +56,23 @@ void handle_arpreq(struct sr_instance *sr, struct sr_arpreq* req) {
     /*Get the arp request from the cache structure. */
     if (difftime(curtime,req->sent) > 1.0) {
         if (req->times_sent >= 5) {
-        
-	    for (packet = req->packets; packet != NULL; packet = packet->next) {
-                
+            
+    	    for (packet = req->packets; packet != NULL; packet = packet->next) {
+                    
                 uint8_t packet_copy[packet->len];
                 memcpy(packet_copy, packet, packet->len);
 
-		/*uint8_t source_ip[4];
-		memcpy(source_ip, &packet[26], 4);
-		char ip_string[9];*/
+    		    /*uint8_t source_ip[4];
+    		    memcpy(source_ip, &packet[26], 4);
+    		    char ip_string[9];*/
 
                 send_icmp(sr, packet_copy, packet->len, packet->iface, 0x03, 0x01);
-                
+                    
             }
-
 
             struct sr_arpcache *cache = &sr->cache;
             sr_arpreq_destroy(cache, req);
+
         } else {
             /*Make the packet and send it.*/
             struct sr_if *iface;
