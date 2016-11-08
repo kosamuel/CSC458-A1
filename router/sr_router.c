@@ -115,7 +115,8 @@ void send_icmp(struct sr_instance* sr,
   packet[23] = 0x01;
   packet[24] = 0x00;
   packet[25] = 0x00;
-  memcpy(&packet[26], &this_if->ip, 4);
+  /*memcpy(&packet[26], &this_if->ip, 4);*/
+  memcpy(&packet[26], &packet[30], 4);
   memcpy(&packet[30], packet_owner_ip, 4);
 
   printf("packet_owner_mac: %d:%d:%d:%d:%d:%d\n", packet[6],
@@ -186,6 +187,8 @@ void handle_arppacket(struct sr_instance* sr,
     Swap the destination and source addresses
     replace the source address
     */
+
+    /* Make a copy of the packet */
     uint8_t packet_copy[len];
     memcpy(packet_copy, packet, len);
 
@@ -196,8 +199,8 @@ void handle_arppacket(struct sr_instance* sr,
     uint8_t src_hdw[ETHER_ADDR_LEN];
     uint8_t src_pcl[4];
     uint8_t des_hdw[ETHER_ADDR_LEN];
-    unsigned char * iface_addr = sr_get_interface(sr, interface)->addr;
-    memcpy(des_hdw, &iface_addr, ETHER_ADDR_LEN);
+    struct sr_if * this_iface = sr_get_interface(sr, interface);
+    memcpy(des_hdw, &this_iface->addr, ETHER_ADDR_LEN);
     uint8_t des_pcl[4];
 
     /* Save the destination and source address information. */
@@ -210,8 +213,8 @@ void handle_arppacket(struct sr_instance* sr,
     /* Write to the packet copy. */
     packet_copy[21] = 0x02;
     memcpy(&packet_copy[0], src_ether, ETHER_ADDR_LEN);
-    memcpy(&packet_copy[6], iface_addr, ETHER_ADDR_LEN);
-    memcpy(&packet_copy[22], iface_addr, ETHER_ADDR_LEN);
+    memcpy(&packet_copy[6], this_iface->addr, ETHER_ADDR_LEN);
+    memcpy(&packet_copy[22], des_hdw, ETHER_ADDR_LEN);
     memcpy(&packet_copy[28], des_pcl, 4);
     memcpy(&packet_copy[32], src_hdw, ETHER_ADDR_LEN);
     memcpy(&packet_copy[38], src_pcl, 4);
@@ -222,6 +225,7 @@ void handle_arppacket(struct sr_instance* sr,
   /* The packet is an arp reply. */
   } else if (packet[21] == 0x02) {
     /* Cache reply. */
+    /* mac, ip of the replying machine */
     struct sr_arpreq *requests = sr_arpcache_insert(&sr->cache, mac, ip);
     
     /* 
@@ -232,11 +236,13 @@ void handle_arppacket(struct sr_instance* sr,
     if (requests != NULL) {
       for(rpacket = requests->packets; rpacket != NULL; rpacket = rpacket->next) {
         /* Fill out Ether header. */
-        struct sr_if* this_mac = sr_get_interface(sr, rpacket->iface);
+        /* The MAC address for the destination was unknown. */
+        struct sr_if* this_iface = sr_get_interface(sr, rpacket->iface);
         memcpy(rpacket->buf, mac, 6);
-        memcpy(&rpacket->buf[6], this_mac->addr, 6);
+        memcpy(&rpacket->buf[6], this_iface->addr, 6);
 
         /* Update checksum and TTL. */
+        /* Need to do this since TTl is decreased by 1. */
       	uint8_t ip_len8[2];
         memcpy(ip_len8, &rpacket->buf[16], 2);
         int ip_len = htons(bit_size_conversion16(ip_len8));
@@ -269,15 +275,6 @@ void handle_ippacket(struct sr_instance* sr,
                       uint8_t * packet, 
                       unsigned int len,
                       char* interface) {
-  /**********/
-  unsigned char mac[ETHER_ADDR_LEN];
-    
-  memcpy(mac, (unsigned char *) &packet[22], ETHER_ADDR_LEN);
-  uint8_t packet_ip[4];
-  memcpy(packet_ip, (uint8_t *)&packet[28], 4);
-  uint32_t ip = bit_size_conversion(packet_ip);
-  sr_arpcache_insert(&sr->cache, mac, ip);
-  /***********/
 
   uint8_t packet_copy2[len];
   memcpy(packet_copy2, packet, len);
@@ -286,6 +283,7 @@ void handle_ippacket(struct sr_instance* sr,
   uint8_t packet_copy[len];
   memcpy(packet_copy, packet, len);
 	
+  /* Get the of the ip packet */
   uint8_t len_in_packet[2];
   memcpy(len_in_packet, &packet[16], 2);
   int ip_len = htons(bit_size_conversion(len_in_packet));
@@ -293,12 +291,14 @@ void handle_ippacket(struct sr_instance* sr,
   printf("ip_len: %d\n", ip_len);
   printf("True ip_len: %d%d\n", packet[16], packet[17]);
   
+  /* Make a copy of the packet checksum */
   uint8_t cksum_buf[2];
   memcpy(cksum_buf, &packet[24], 2);
   uint16_t this_cksum = htons(bit_size_conversion16(cksum_buf));
   printf("cksum: %d\n", this_cksum);
   printf("True cksum: %d%d\n", packet[24], packet[25]);
   
+  /* Reset checksum */
   packet_copy[24] = 0x00;
   packet_copy[25] = 0x00;
 
@@ -314,7 +314,7 @@ void handle_ippacket(struct sr_instance* sr,
     printf("Incorrect length line 177");
     return;
 
-  } else if (packet_copy[22] == 0) {
+  } else if (packet_copy[22] <= 0) {
     printf("TTL is 0");
 
     uint8_t packet_copy2[len];
@@ -328,17 +328,23 @@ void handle_ippacket(struct sr_instance* sr,
 
   printf("Correct Checksum\n");
 
-  /* Get destination IP address for this packet. */
+  /* Packet is correct, now process it */
+  /* First, check if the packet is for this router. */
+  /* Get destination IP address for this packet. 
+     Also convert the IP into uint32_t.
+  */
   uint8_t des_addr[4];
   memcpy(des_addr, &packet[30], 4);
   uint32_t des_addr32 = bit_size_conversion(des_addr);
 
+  /* Get the receiving interface's IP */
   uint32_t this_ip = sr_get_interface(sr, interface)->ip;
 
   /* If the packet is for this router. */
   if (memcmp(&des_addr32, &this_ip, 4) == 0) {
     printf("Successfully compared addresses: Line 164\n");
 
+    /* It is an echo request */
     if (packet[23] == 0x01) {
       if (packet[34] == 0x08 && packet[35] == 0x00) {
 
@@ -349,8 +355,8 @@ void handle_ippacket(struct sr_instance* sr,
 
       }
 
-    /*} else if (packet[23] == 0x06 || packet[23] == 0x11) {*/
-    } else {
+    /* It is an UDP or TCP packet */
+    } else if (packet[23] == 0x06 || packet[23] == 0x11) {
       
       uint8_t packet_copy2[len];
       memcpy(packet_copy2, packet, len);
@@ -359,22 +365,20 @@ void handle_ippacket(struct sr_instance* sr,
 
     }
 
+  /* The packet is not for here and needs to be redirected */
   } else {
     /* Check routing table. */
     struct sr_rt *rtable;
     char ip_string[9];
 
+    /* Convert the ip address into a string */
     sprintf(ip_string, "%d.%d.%d.%d", des_addr[0], des_addr[1],
                                       des_addr[2], des_addr[3]);
 
-    /* IP address information. */
-    /*
-    uint8_t packet_ip[4];
-    memcpy(packet_ip, (uint8_t *)&packet[28], 4);
-    uint32_t ip = bit_size_conversion(packet_ip);*/
-
+    /* Initialize variables for Longest Prefix Matching */
     int len_longest_prefix = 0;
-    char *longest_prefix = malloc(sizeof(char) * 1024);
+    /* char *longest_prefix = malloc(sizeof(char) * 1024); */
+    char longest_prefix[128]; 
     strncpy(longest_prefix, "None", 5);
     struct sr_rt *outgoing;
 
@@ -443,7 +447,7 @@ void handle_ippacket(struct sr_instance* sr,
         send_icmp(sr, packet_copy2, len, interface, 0x03, 0x00);
 
       }
-    free(longest_prefix);  
+    /*free(longest_prefix); */ 
 
   }  
 }
