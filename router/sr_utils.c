@@ -38,7 +38,7 @@ struct sr_icmp_hdr *icmp_header(struct sr_ip_hdr *ip_hdr){
 uint8_t * icmp_t3(uint8_t *payload, uint8_t type, uint8_t code) {
 
     /*if (type == 0x03 || type == 0x0B) {*/
-    if (0) {
+    if (1) {
       static uint8_t buf[36];    
 
       /* Set up the ICMP header. */

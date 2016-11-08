@@ -67,7 +67,7 @@ uint16_t bit_size_conversion16(uint8_t bytes[2]) {
   return sixteen;
 }
 
-void send_icmp(struct sr_instance* sr, 
+void send_icmp_reply(struct sr_instance* sr, 
                uint8_t * packet,
                unsigned int len,
                char* interface, 
@@ -208,6 +208,80 @@ void send_icmp(struct sr_instance* sr,
 
   printf("Packet ICMP type, code: %d, %d\n", buf[34], buf[35]);
   printf("Interface name: %s\n", interface);
+  sr_send_packet(sr, buf, sizeof(buf), interface);
+}
+
+void send_icmp(struct sr_instance* sr, 
+               uint8_t * packet,
+               unsigned int len,
+               char* interface, 
+               uint8_t type, 
+               uint8_t code) {
+
+  printf("ip_len before changes: %d-%d\n", packet[16], packet[17]);
+  
+  uint8_t icmp_hdr[36];    
+  
+  icmp_hdr[0] = type;
+  icmp_hdr[1] = code;
+  icmp_hdr[2] = 0x00;
+  icmp_hdr[3] = 0x00;
+  icmp_hdr[4] = 0x00;
+  icmp_hdr[5] = 0x00;
+  icmp_hdr[6] = 0x00;
+  icmp_hdr[7] = 0x00;
+
+  memcpy(&icmp_hdr[8], &packet[14], 28);
+  
+  /* Perform Checksum */
+  uint16_t icmp_checksum = htons(cksum(icmp_hdr, 36));
+  uint8_t icmp_checksum0 = icmp_checksum >> 8;
+  uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
+  icmp_hdr[2] = icmp_checksum0;
+  icmp_hdr[3] = icmp_checksum1;
+  
+  int ip_len = 20 + 36; /* IP header + ICMP */
+
+  packet[16] = (ip_len) >> 8;
+  packet[17] = (ip_len);
+
+  uint8_t buf[ip_len + 14];  /* IP packet + Ethernet header */
+
+  /* Get necessary information */
+  struct sr_if *this_if = sr_get_interface(sr, interface);
+  uint8_t packet_owner_mac[6];
+  memcpy(packet_owner_mac, &packet[6], ETHER_ADDR_LEN);
+  uint8_t packet_owner_ip[4];
+  memcpy(packet_owner_ip, &packet[26], 4);
+
+  /* Update IP header */
+  packet[23] = 0x01;
+  packet[24] = 0x00;
+  packet[25] = 0x00;
+
+  /*if (type == 0x00) {*/
+  if (code == 0x03) {
+    memcpy(&packet[26], &packet[30], 4);
+  } else {
+    memcpy(&packet[26], &this_if->ip, 4);
+  /*memcpy(&packet[26], &packet[30], 4);*/
+  }
+
+  memcpy(&packet[30], packet_owner_ip, 4);
+
+  /* Put the packet together */
+  memcpy(buf, packet, 34); /* Copy only the Ethernet and IP headers */
+  memcpy(buf, packet_owner_mac, ETHER_ADDR_LEN);
+  memcpy(&buf[6], &this_if->addr, ETHER_ADDR_LEN);
+  memcpy(&buf[34], icmp_hdr, 36);
+
+  /* IP Checksum */
+  uint16_t new_checksum = htons(cksum(&buf[14], ip_len));
+  uint8_t new_checksum0 = new_checksum >> 8;
+  uint8_t new_checksum1 = (new_checksum << 8) >> 8;
+  buf[24] = new_checksum0;
+  buf[25] = new_checksum1;
+
   sr_send_packet(sr, buf, sizeof(buf), interface);
 }
 
@@ -410,7 +484,7 @@ void handle_ippacket(struct sr_instance* sr,
           uint8_t packet_copy2[len];
           memcpy(packet_copy2, packet, len);
 
-          send_icmp(sr, packet_copy2, len, interface, 0x00, 0x00);
+          send_icmp_reply(sr, packet_copy2, len, interface, 0x00, 0x00);
           return;
         /*}*/
 
