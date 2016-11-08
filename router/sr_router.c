@@ -77,24 +77,52 @@ void send_icmp(struct sr_instance* sr,
   printf("ip_len before changes: %d-%d\n", packet[16], packet[17]);
   
   /* Create ICMP header first */
+  /*
   uint8_t *icmp_hdr;
   if (type == 0x00) {
-    icmp_hdr = icmp_t3(&packet[42], type, code);
-  } else if (type == 0x03 || type == 0x0B) {
     icmp_hdr = icmp_t3(&packet[14], type, code);
 
-  }
+  } else {
+    icmp_hdr = icmp_t3(&packet[14], type, code);
+
+  }*/
   
+    packet[34] = type;
+    packet[35] = code;
+    packet[36] = 0x00;
+    packet[37] = 0x00;
+
+    uint8_t icmp_hdr[len - 34];
+    memcpy(icmp_hdr, &packet[34], len - 34);
+
+    uint16_t icmp_checksum = htons(cksum(icmp_hdr, len - 34));
+    uint8_t icmp_checksum0 = icmp_checksum >> 8;
+    uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
+    icmp_hdr[2] = icmp_checksum0;
+    icmp_hdr[3] = icmp_checksum1;
+
+  
+    /*
+    uint8_t icmp_hdr[36];
+
+    struct sr_icmp_t3_hdr icmp_response;
+    icmp_response.icmp_type = type;
+    icmp_response.icmp_code = code;
+    icmp_response.icmp_sum = 0x0000;
+    icmp_response.unused = 0x0000;
+    icmp_response.next_mtu = 0x0000;
+    memcpy(icmp_response.data, &packet[14], 28);
+ 
+    memcpy(icmp_hdr, &icmp_response, 36);
+    */
+  
+   
   /* Update IP packet next */
   /* Update total length */
   uint8_t len_in_packet[2];
   memcpy(len_in_packet, &packet[16], 2);
-  int ip_len;
-  if (type == 0x00) {
-    ip_len = htons(bit_size_conversion(len_in_packet));
-  } else {
-    ip_len = htons(bit_size_conversion(len_in_packet)) + 8;
-  }
+  /*int ip_len = htons(bit_size_conversion(len_in_packet)) + 8;*/
+  int ip_len = htons(bit_size_conversion(len_in_packet));
 
   packet[16] = (ip_len) >> 8;
   packet[17] = (ip_len);
@@ -127,8 +155,15 @@ void send_icmp(struct sr_instance* sr,
   packet[23] = 0x01;
   packet[24] = 0x00;
   packet[25] = 0x00;
-  /*memcpy(&packet[26], &this_if->ip, 4);*/
-  memcpy(&packet[26], &packet[30], 4);
+
+  /*if (type == 0x00) {*/
+  if (1) {
+    memcpy(&packet[26], &packet[30], 4);
+  } else {
+    memcpy(&packet[26], &this_if->ip, 4);
+  /*memcpy(&packet[26], &packet[30], 4);*/
+  }
+
   memcpy(&packet[30], packet_owner_ip, 4);
 
   printf("packet_owner_mac: %d:%d:%d:%d:%d:%d\n", packet[6],
@@ -288,6 +323,15 @@ void handle_ippacket(struct sr_instance* sr,
                       unsigned int len,
                       char* interface) {
 
+  uint8_t src_addr[4];
+  memcpy(src_addr, &packet[26], 4);
+  uint32_t src_addr32 = bit_size_conversion(src_addr);
+  struct sr_arpentry *entry = sr_arpcache_lookup(&sr->cache, src_addr32);
+  if (entry != NULL) {
+    entry->valid = 1;
+    entry->added = time(NULL);
+  }
+
   uint8_t packet_copy2[len];
   memcpy(packet_copy2, packet, len);
 
@@ -317,11 +361,11 @@ void handle_ippacket(struct sr_instance* sr,
   uint16_t ip_checksum = htons(cksum(&packet_copy[14], ip_len));
   printf("Checksum checking: %d\n", ip_checksum);
 
-  if (ip_checksum != this_cksum) {
+  /*if (ip_checksum != this_cksum) {
     printf("Incorrect checksum line 173");
     return;
-
-  /* Check for correct length. */
+  */
+  /* Check for correct length. *//*
   } else if (ip_len != len - 14) {
     printf("Incorrect length line 177");
     return;
@@ -336,7 +380,7 @@ void handle_ippacket(struct sr_instance* sr,
 
     return;  
 
-  }
+  }*/
 
   printf("Correct Checksum\n");
 
@@ -360,8 +404,7 @@ void handle_ippacket(struct sr_instance* sr,
       printf("Successfully compared addresses: Line 164\n");
 
       /* It is an echo request */
-      /*if (packet[23] == 0x01) {*/
-      if (1) {
+      if (packet[23] == 0x01) {
         /*if (packet[34] == 0x08 && packet[35] == 0x00) {*/
 
           uint8_t packet_copy2[len];
@@ -406,6 +449,7 @@ void handle_ippacket(struct sr_instance* sr,
     printf("Destination IP %s\n", ip_string);
     
     /* Compare IP addresses.  Both are in a.b.c.d format. */
+    
     if (sizeof(inet_ntoa(rtable->dest)) > len_longest_prefix &&
        strncmp(inet_ntoa(rtable->dest), ip_string, sizeof(ip_string) - 1) == 0) {
        
@@ -414,6 +458,14 @@ void handle_ippacket(struct sr_instance* sr,
        outgoing = rtable;  /* Set the rtable entry as the current outgoing interface */
    
     }
+
+    /*
+    if (strncmp(inet_ntoa(rtable->dest), ip_string, sizeof(inet_ntoa)) == 0) {
+      strncpy(longest_prefix, inet_ntoa(rtable->dest), sizeof(inet_ntoa(rtable->dest)));
+      outgoing = rtable;
+
+    }*/
+
   }
 
     /* Check if the longest prefix was found */
@@ -424,7 +476,7 @@ void handle_ippacket(struct sr_instance* sr,
       /* If the arp was a miss. */
       if (arpentry == NULL) {
         printf("xxxxxxxxxxxxxxxxxxxxxxxxQueuing request: Line 187\n");
-        sr_arpcache_queuereq(&sr->cache, des_addr32, packet_copy, len, outgoing->interface);
+        sr_arpcache_queuereq(&sr->cache, des_addr32, packet_copy2, len, outgoing->interface);
         printf("Finished queuing request: Line 189\n");
 
       /* Cache entry was found. */
@@ -435,29 +487,33 @@ void handle_ippacket(struct sr_instance* sr,
         /* des_addr32 is the uint32_t destination address for the packet */
         /*struct sr_arpentry* destination = sr_arpcache_lookup(&sr->cache, des_addr32); */
         struct sr_if* this_mac = sr_get_interface(sr, outgoing->interface);
-        memcpy(packet_copy, arpentry->mac, 6);
-        memcpy(&packet_copy[6], this_mac->addr, 6);
+        memcpy(packet_copy2, arpentry->mac, 6);
+        memcpy(&packet_copy2[6], this_mac->addr, 6);
 
         /* Update TTL. */
-        printf("TTL before: %d\n", packet_copy[22]);
-        packet_copy[22] = packet_copy[22] - 1;
-        printf("TTL after: %d\n", packet_copy[22]);
+        printf("TTL before: %d\n", packet_copy2[22]);
+        packet_copy2[22] = packet_copy2[22] - 1;
+        printf("TTL after: %d\n", packet_copy2[22]);
 
         /* Reset the checksum. */
-        packet_copy[24] = 0x00;
-        packet_copy[25] = 0x00;
+        packet_copy2[24] = 0x00;
+        packet_copy2[25] = 0x00;
+
+        uint8_t len_in_packet[2];
+        memcpy(len_in_packet, &packet[16], 2);
+        int ip_len = htons(bit_size_conversion(len_in_packet));
 
         /* Recalculate checksum */
-        uint16_t new_checksum = htons(cksum(&packet_copy[14], ip_len));
+        uint16_t new_checksum = htons(cksum(&packet_copy2[14], ip_len));
         uint8_t new_checksum0 = new_checksum >> 8;
         uint8_t new_checksum1 = (new_checksum << 8) >> 8;
-        packet_copy[24] = new_checksum0;
-        packet_copy[25] = new_checksum1;
+        packet_copy2[24] = new_checksum0;
+        packet_copy2[25] = new_checksum1;
         /* memcpy(&packet_copy[24], (uint8_t *)new_checksum, 2); */
-        printf("cksum in packet: %d%d\n", packet_copy[24], packet_copy[25]);
+        printf("cksum in packet: %d%d\n", packet_copy2[24], packet_copy2[25]);
         printf("Reverse cksum: %d\n", new_checksum);
 
-        sr_send_packet(sr, packet_copy, len, outgoing->interface);
+        sr_send_packet(sr, packet_copy2, len, outgoing->interface);
         printf("Finished redirecting packet: Line 194\n");
 
       }

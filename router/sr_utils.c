@@ -37,7 +37,8 @@ struct sr_icmp_hdr *icmp_header(struct sr_ip_hdr *ip_hdr){
 
 uint8_t * icmp_t3(uint8_t *payload, uint8_t type, uint8_t code) {
 
-    if (type == 0x03 || type == 0x0B) {
+    /*if (type == 0x03 || type == 0x0B) {*/
+    if (0) {
       static uint8_t buf[36];    
 
       /* Set up the ICMP header. */
@@ -60,7 +61,7 @@ uint8_t * icmp_t3(uint8_t *payload, uint8_t type, uint8_t code) {
 
       return buf;
 
-    } else {
+    } else if (0) {
       static uint8_t buf[36];
 
       struct sr_icmp_hdr icmp_response;
@@ -84,6 +85,20 @@ uint8_t * icmp_t3(uint8_t *payload, uint8_t type, uint8_t code) {
       buf[3] = icmp_checksum1;
 
       return buf;
+    } else {
+      payload[0] == type;
+      payload[1] == code;
+      payload[2] == 0x00;
+      payload[3] == 0x00;
+
+      int payload_len = sizeof(payload);
+      uint16_t icmp_checksum = htons(cksum(payload, payload_len));
+      uint8_t icmp_checksum0 = icmp_checksum >> 8;
+      uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
+      payload[2] = icmp_checksum0;
+      payload[3] = icmp_checksum1;
+
+      return payload;
     }
       
 }
