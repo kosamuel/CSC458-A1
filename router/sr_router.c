@@ -379,7 +379,7 @@ void handle_arppacket(struct sr_instance* sr,
         rpacket->buf[24] = 0x00;
         rpacket->buf[25] = 0x00;
 
-        uint16_t new_checksum = htons(cksum(&rpacket->buf[14], ip_len));
+        uint16_t new_checksum = htons(cksum(&rpacket->buf[14], 20));
         uint8_t new_checksum0 = new_checksum >> 8;
         uint8_t new_checksum1 = (new_checksum << 8) >> 8;
         rpacket->buf[24] = new_checksum0;
@@ -439,13 +439,13 @@ void handle_ippacket(struct sr_instance* sr,
   packet_copy[24] = 0x00;
   packet_copy[25] = 0x00;
 
-  uint16_t ip_checksum = htons(cksum(&packet_copy[14], ip_len));
+  uint16_t ip_checksum = htons(cksum(&packet_copy[14], 20));
   printf("Checksum checking: %d\n", ip_checksum);
 
-  /*if (ip_checksum != this_cksum) {
+  if (ip_checksum != this_cksum) {
     printf("Incorrect checksum line 173");
     return;
-  */
+  }
   /* Check for correct length. *//*
   } else if (ip_len != len - 14) {
     printf("Incorrect length line 177");
@@ -577,7 +577,7 @@ void handle_ippacket(struct sr_instance* sr,
       int ip_len = htons(bit_size_conversion(len_in_packet));
 
       /* Recalculate checksum */
-      uint16_t new_checksum = htons(cksum(&packet_copy2[14], ip_len));
+      uint16_t new_checksum = htons(cksum(&packet_copy2[14], 20));
       uint8_t new_checksum0 = new_checksum >> 8;
       uint8_t new_checksum1 = (new_checksum << 8) >> 8;
       packet_copy2[24] = new_checksum0;
