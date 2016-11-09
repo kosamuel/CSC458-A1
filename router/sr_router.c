@@ -444,17 +444,6 @@ void handle_ippacket(struct sr_instance* sr,
     printf("Incorrect length line 177");
     return;
   */
-  if (packet_copy[22] - 1 <= 0) {
-    printf("TTL is 0");
-
-    uint8_t packet_copy2[len];
-    memcpy(packet_copy2, packet, len);
-
-    send_icmp(sr, packet_copy2, len, interface, 0x0B, 0x00);
-
-    return;  
-
-  }
 
   printf("Correct Checksum\n");
 
@@ -500,6 +489,17 @@ void handle_ippacket(struct sr_instance* sr,
     }
   }
   
+  if (packet_copy[22] - 1 <= 0) {
+    printf("TTL is 0");
+
+    uint8_t packet_copy2[len];
+    memcpy(packet_copy2, packet, len);
+
+    send_icmp(sr, packet_copy2, len, interface, 0x0B, 0x00);
+
+    return;  
+
+  }
 
   /* The packet is not for here and needs to be redirected */
   /* Check routing table. */
