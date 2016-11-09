@@ -194,7 +194,7 @@ void send_icmp_reply(struct sr_instance* sr,
   memcpy(&buf[34], icmp_hdr, ip_len - 20);
 
   /* IP Checksum */
-  uint16_t new_checksum = htons(cksum(&buf[14], ip_len));
+  uint16_t new_checksum = htons(cksum(&buf[14], 20));
   uint8_t new_checksum0 = new_checksum >> 8;
   uint8_t new_checksum1 = (new_checksum << 8) >> 8;
   buf[24] = new_checksum0;
@@ -282,7 +282,7 @@ void send_icmp(struct sr_instance* sr,
   memcpy(&buf[34], icmp_hdr, 36);
 
   /* IP Checksum */
-  uint16_t new_checksum = htons(cksum(&buf[14], ip_len));
+  uint16_t new_checksum = htons(cksum(&buf[14], 20));
   uint8_t new_checksum0 = new_checksum >> 8;
   uint8_t new_checksum1 = (new_checksum << 8) >> 8;
   buf[24] = new_checksum0;
@@ -549,6 +549,8 @@ void handle_ippacket(struct sr_instance* sr,
     /* If the arp was a miss. */
     if (arpentry == NULL) {
       printf("xxxxxxxxxxxxxxxxxxxxxxxxQueuing request: Line 187\n");
+      uint8_t packet_copy2[len];
+      memcpy(packet_copy2, packet, len);
       sr_arpcache_queuereq(&sr->cache, des_addr32, packet_copy2, len, outgoing->interface, interface);
       printf("Finished queuing request: Line 189\n");
 
