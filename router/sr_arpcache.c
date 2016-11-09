@@ -10,6 +10,7 @@
 #include "sr_router.h"
 #include "sr_if.h"
 #include "sr_protocol.h"
+#include "sr_rt.h"
 
 void send_arp_packet(struct sr_instance* sr,
                      struct sr_if* iface,
@@ -62,11 +63,36 @@ void handle_arpreq(struct sr_instance *sr, struct sr_arpreq* req) {
                 uint8_t packet_copy[packet->len];
                 memcpy(packet_copy, packet, packet->len);
 
-    		    /*uint8_t source_ip[4];
-    		    memcpy(source_ip, &packet[26], 4);
-    		    char ip_string[9];*/
+                struct sr_rt *rtable;
+                char src_ip_string[9];
 
-                send_icmp(sr, packet_copy, packet->len, packet->iface, 0x03, 0x01);
+                /* Get the IP of the packet's source */
+                sprintf(src_ip_string, "%d.%d.%d.%d", packet_copy[26], packet_copy[27],
+                                                  packet_copy[28], packet_copy[29]);
+ 
+                /* Initialize variables for Longest Prefix Matching */
+                int len_longest_prefix = 0;
+                /* char *longest_prefix = malloc(sizeof(char) * 1024); */
+                char longest_prefix[128]; 
+                strncpy(longest_prefix, "None", 5);
+                struct sr_rt *outgoing;
+
+                /* Find the returning interface for the source ip */
+                for (rtable = sr->routing_table; rtable != NULL; rtable = rtable->next) {
+                    /* Compare IP addresses.  Both are in a.b.c.d format. */
+                    
+                    if (sizeof(inet_ntoa(rtable->dest)) > len_longest_prefix &&
+                       strncmp(inet_ntoa(rtable->dest), src_ip_string, sizeof(src_ip_string) - 1) == 0) {
+                       
+                       strncpy(longest_prefix, inet_ntoa(rtable->dest), sizeof(inet_ntoa(rtable->dest)));
+                       len_longest_prefix = sizeof(inet_ntoa(rtable->dest));
+                       outgoing = rtable;  /* Set the rtable entry as the current outgoing interface */
+                   
+                    }
+                }
+
+
+                send_icmp(sr, packet_copy, packet->len, outgoing->interface, 0x03, 0x01);
                     
             }
 

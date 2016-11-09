@@ -443,8 +443,8 @@ void handle_ippacket(struct sr_instance* sr,
   } else if (ip_len != len - 14) {
     printf("Incorrect length line 177");
     return;
-
-  } else if (packet_copy[22] <= 0) {
+  */
+  if (packet_copy[22] - 1 <= 0) {
     printf("TTL is 0");
 
     uint8_t packet_copy2[len];
@@ -454,7 +454,7 @@ void handle_ippacket(struct sr_instance* sr,
 
     return;  
 
-  }*/
+  }
 
   printf("Correct Checksum\n");
 
