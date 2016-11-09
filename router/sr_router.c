@@ -75,8 +75,22 @@ void send_icmp_reply(struct sr_instance* sr,
                uint8_t code) {
 
   printf("ip_len before changes: %d-%d\n", packet[16], packet[17]);
-  
-  struct sr_arpentry *sr_arpcache_lookup(struct sr_arpcache *cache, uint32_t ip)
+
+  /*
+  uint8_t src_addr[4];
+  memcpy(src_addr, &packet[26], 4);
+  uint32_t src_addr32 = bit_size_conversion(src_addr);
+  struct sr_arpentry *entry = sr_arpcache_lookup(&sr->cache, src_addr32);
+
+  *//* Perform checksum. *//*
+  uint8_t packet_copy[len];
+  memcpy(packet_copy, packet, len);
+
+  if (entry == NULL) {
+    sr_arpcache_queuereq(&sr->cache, src_addr32, packet_copy, len, interface);
+    return;
+
+  }*/
 
   /* Create ICMP header first */
   packet[34] = type;
@@ -404,11 +418,7 @@ void handle_ippacket(struct sr_instance* sr,
   if (entry != NULL) {
     entry->valid = 1;
     entry->added = time(NULL);
-  } else {
-    sr_arpcache_queuereq(&sr->cache, src_addr32, packet_copy, len, interface);
-    return;
-
-  }
+  } 
 	
   /* Get the of the ip packet */
   uint8_t len_in_packet[2];

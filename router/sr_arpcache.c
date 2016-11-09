@@ -91,7 +91,6 @@ void handle_arpreq(struct sr_instance *sr, struct sr_arpreq* req) {
                     }
                 }
 
-
                 send_icmp(sr, packet_copy, packet->len, outgoing->interface, 0x03, 0x01);
                     
             }
