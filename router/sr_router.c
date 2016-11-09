@@ -445,12 +445,12 @@ void handle_ippacket(struct sr_instance* sr,
   if (ip_checksum != this_cksum) {
     printf("Incorrect checksum line 173");
     return;
-  }
-  /* Check for correct length. *//*
+
+  /* Check for correct length. */
   } else if (ip_len != len - 14) {
     printf("Incorrect length line 177");
     return;
-  */
+  }
 
   printf("Correct Checksum\n");
 
@@ -549,7 +549,7 @@ void handle_ippacket(struct sr_instance* sr,
     /* If the arp was a miss. */
     if (arpentry == NULL) {
       printf("xxxxxxxxxxxxxxxxxxxxxxxxQueuing request: Line 187\n");
-      sr_arpcache_queuereq(&sr->cache, des_addr32, packet_copy2, len, outgoing->interface);
+      sr_arpcache_queuereq(&sr->cache, des_addr32, packet_copy2, len, outgoing->interface, interface);
       printf("Finished queuing request: Line 189\n");
 
     /* Cache entry was found. */

@@ -79,6 +79,7 @@ struct sr_packet {
     unsigned int len;           /* Length of raw Ethernet frame */
     char *iface;                /* The outgoing interface */
     struct sr_packet *next;
+    char *re_iface;
 };
 
 struct sr_arpentry {
@@ -121,7 +122,8 @@ struct sr_arpreq *sr_arpcache_queuereq(struct sr_arpcache *cache,
                          uint32_t ip,
                          uint8_t *packet,               /* borrowed */
                          unsigned int packet_len,
-                         char *iface);
+                         char *iface,
+                         char *re_iface);
 
 /* This method performs two functions:
    1) Looks up this IP in the request queue. If it is found, returns a pointer
