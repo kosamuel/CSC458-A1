@@ -10,6 +10,80 @@
 #include "sr_router.h"
 #include "sr_if.h"
 #include "sr_protocol.h"
+#include "sr_rt.h"
+
+void send_arp_packet(struct sr_instance* sr,
+                     struct sr_if* iface,
+                     struct sr_arpreq* req) {
+    /*Create Ethernet header.*/
+    struct sr_ethernet_hdr ether;
+    unsigned long num = 0xFFFFFFFFFFFF;
+    uint8_t* broadcast = (uint8_t *) num;
+
+    memcpy(ether.ether_dhost, &broadcast, ETHER_ADDR_LEN);
+    memcpy(ether.ether_shost, iface->addr, ETHER_ADDR_LEN);
+    ether.ether_type = htons(0x0806);
+
+    /*Create ARP header.*/
+    struct sr_arp_hdr arp;
+    arp.ar_hrd = htons(0x0001);
+    arp.ar_pro = htons(0x0800);
+    arp.ar_hln = ETHER_ADDR_LEN;
+    arp.ar_pln = 4;
+    arp.ar_op = htons(0x0001);
+    memcpy(arp.ar_sha, iface->addr, ETHER_ADDR_LEN);
+    arp.ar_sip = iface->ip;
+
+    unsigned char no_addr[ETHER_ADDR_LEN] = {0x00,0x00,0x00,0x00,0x00,0x00};
+
+    memcpy(arp.ar_tha, no_addr, ETHER_ADDR_LEN);
+    arp.ar_tip = req->ip;
+    
+    unsigned int etherlen = sizeof(ether);
+    unsigned int arplen = sizeof(arp);
+    uint8_t* buf[etherlen + arplen];
+    memcpy(buf, &ether, etherlen);
+    memcpy(&buf[etherlen], &arp, arplen);
+
+    sr_send_packet(sr, buf, etherlen+arplen, iface->name);
+    printf("ethertype: %d", buf[12]);
+    printf("%d\n", buf[13]);
+}
+
+void handle_arpreq(struct sr_instance *sr, struct sr_arpreq* req) {
+    time_t curtime = time(NULL);
+    struct sr_packet *packet;
+
+    /*Get the arp request from the cache structure. */
+    if (difftime(curtime,req->sent) > 1.0) {
+        if (req->times_sent >= 5) {
+            
+    	    for (packet = req->packets; packet != NULL; packet = packet->next) {
+                    
+                uint8_t packet_copy[packet->len];
+                memcpy(packet_copy, packet->buf, packet->len);
+
+                send_icmp(sr, packet_copy, packet->len, packet->re_iface, 0x03, 0x01);
+                    
+            }
+
+            struct sr_arpcache *cache = &sr->cache;
+            sr_arpreq_destroy(cache, req);
+
+        } else {
+            /*Make the packet and send it.*/
+            struct sr_if *iface;
+            for (iface = sr->if_list; iface != NULL; iface = iface->next) {
+                send_arp_packet(sr, iface, req);
+            
+            }
+
+            req->sent = curtime;
+            req->times_sent++;
+
+        }
+    }
+}
 
 /* 
   This function gets called every second. For each request sent out, we keep
@@ -17,7 +91,18 @@
   See the comments in the header file for an idea of what it should look like.
 */
 void sr_arpcache_sweepreqs(struct sr_instance *sr) { 
-    /* Fill this in */
+    struct sr_arpreq* req = sr->cache.requests;
+    struct sr_arpreq* next;
+
+    /*
+      Using a while loop here since sr_destroy_arpcache might destroy the current 
+      request and mess up the for loop.
+    */
+    while (req) {
+        next = req->next;
+        handle_arpreq(sr, req);
+        req = next;
+    }
 }
 
 /* You should not need to touch the rest of this code. */
@@ -58,7 +143,8 @@ struct sr_arpreq *sr_arpcache_queuereq(struct sr_arpcache *cache,
                                        uint32_t ip,
                                        uint8_t *packet,           /* borrowed */
                                        unsigned int packet_len,
-                                       char *iface)
+                                       char *iface,
+                                       char *re_iface)
 {
     pthread_mutex_lock(&(cache->lock));
     
@@ -86,6 +172,8 @@ struct sr_arpreq *sr_arpcache_queuereq(struct sr_arpcache *cache,
         new_pkt->len = packet_len;
 		new_pkt->iface = (char *)malloc(sr_IFACE_NAMELEN);
         strncpy(new_pkt->iface, iface, sr_IFACE_NAMELEN);
+        new_pkt->re_iface = (char *)malloc(sr_IFACE_NAMELEN);
+        strncpy(new_pkt->re_iface, re_iface, sr_IFACE_NAMELEN);
         new_pkt->next = req->packets;
         req->packets = new_pkt;
     }
@@ -171,6 +259,8 @@ void sr_arpreq_destroy(struct sr_arpcache *cache, struct sr_arpreq *entry) {
                 free(pkt->buf);
             if (pkt->iface)
                 free(pkt->iface);
+            if (pkt->re_iface)
+                free(pkt->re_iface);
             free(pkt);
         }
         

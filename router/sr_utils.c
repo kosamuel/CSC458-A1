@@ -30,6 +30,78 @@ uint8_t ip_protocol(uint8_t *buf) {
   return iphdr->ip_p;
 }
 
+/*return a icmp header*/
+struct sr_icmp_hdr *icmp_header(struct sr_ip_hdr *ip_hdr){
+  return (struct sr_icmp_hdr *)((uint8_t *)(ip_hdr) + 16);
+}
+
+uint8_t * icmp_t3(uint8_t *payload, uint8_t type, uint8_t code) {
+
+    /*if (type == 0x03 || type == 0x0B) {*/
+    if (1) {
+      static uint8_t buf[36];    
+
+      /* Set up the ICMP header. */
+      struct sr_icmp_t3_hdr icmp_response;
+      icmp_response.icmp_type = type;
+      icmp_response.icmp_code = code;
+      icmp_response.icmp_sum = 0x0000;
+      icmp_response.unused = 0x0000;
+      icmp_response.next_mtu = 0x0000;
+      memcpy(icmp_response.data, payload, 28);
+ 
+      memcpy(buf, &icmp_response, 36);
+
+      /* Perform Checksum */
+      uint16_t icmp_checksum = htons(cksum(buf, 36));
+      uint8_t icmp_checksum0 = icmp_checksum >> 8;
+      uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
+      buf[2] = icmp_checksum0;
+      buf[3] = icmp_checksum1;
+
+      return buf;
+
+    } else if (0) {
+      static uint8_t buf[36];
+
+      struct sr_icmp_hdr icmp_response;
+      icmp_response.icmp_type = type;
+      icmp_response.icmp_code = code;
+      buf[2] = 0x00;
+      buf[3] = 0x00;
+      buf[4] = 0x00;
+      buf[5] = 0x00;
+      buf[6] = 0x00;
+      buf[7] = 0x00;
+
+      memcpy(buf, &icmp_response, 4);
+      int payload_len = sizeof(payload);
+      memcpy(&buf[8], payload, payload_len);
+
+      uint16_t icmp_checksum = htons(cksum(buf, 8 + payload_len));
+      uint8_t icmp_checksum0 = icmp_checksum >> 8;
+      uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
+      buf[2] = icmp_checksum0;
+      buf[3] = icmp_checksum1;
+
+      return buf;
+    } else {
+      payload[0] == type;
+      payload[1] == code;
+      payload[2] == 0x00;
+      payload[3] == 0x00;
+
+      int payload_len = sizeof(payload);
+      uint16_t icmp_checksum = htons(cksum(payload, payload_len));
+      uint8_t icmp_checksum0 = icmp_checksum >> 8;
+      uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
+      payload[2] = icmp_checksum0;
+      payload[3] = icmp_checksum1;
+
+      return payload;
+    }
+      
+}
 
 /* Prints out formatted Ethernet address, e.g. 00:11:22:33:44:55 */
 void print_addr_eth(uint8_t *addr) {

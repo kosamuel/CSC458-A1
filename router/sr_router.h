@@ -53,6 +53,8 @@ struct sr_instance
     struct sr_rt* routing_table; /* routing table */
     struct sr_arpcache cache;   /* ARP cache */
     pthread_attr_t attr;
+    /* NAT struct */
+    struct sr_nat nat;
     FILE* logfile;
 };
 
@@ -66,7 +68,15 @@ int sr_read_from_server(struct sr_instance* );
 
 /* -- sr_router.c -- */
 void sr_init(struct sr_instance* );
-void sr_handlepacket(struct sr_instance* , uint8_t * , unsigned int , char* );
+void sr_handlepacket(struct sr_instance* , uint8_t * , unsigned int , char* , int nat);
+uint32_t bit_size_conversion(uint8_t bytes[4]);
+uint16_t bit_size_conversion16(uint8_t bytes[2]);
+void send_icmp(struct sr_instance* sr, 
+               uint8_t * packet,
+               unsigned int len,
+               char* interface, 
+               uint8_t type, 
+               uint8_t code);
 
 /* -- sr_if.c -- */
 void sr_add_interface(struct sr_instance* , const char* );

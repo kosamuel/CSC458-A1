@@ -62,6 +62,8 @@ int main(int argc, char **argv)
     char *server = DEFAULT_SERVER;
     char *rtable = DEFAULT_RTABLE;
     char *template = NULL;
+    /* Switch between NAT and SR */
+    int nat_mode = 0;
     unsigned int port = DEFAULT_PORT;
     unsigned int topo = DEFAULT_TOPO;
     char *logfile = 0;
@@ -69,7 +71,7 @@ int main(int argc, char **argv)
 
     printf("Using %s\n", VERSION_INFO);
 
-    while ((c = getopt(argc, argv, "hs:v:p:u:t:r:l:T:")) != EOF)
+    while ((c = getopt(argc, argv, "hs:v:p:u:t:r:l:T:n")) != EOF)
     {
         switch (c)
         {
@@ -101,6 +103,9 @@ int main(int argc, char **argv)
             case 'T':
                 template = optarg;
                 break;
+            /* Use NAT? */
+            case 'n':
+                nat_mode = 1;
         } /* switch */
     } /* -- while -- */
 
@@ -157,10 +162,10 @@ int main(int argc, char **argv)
     }
 
     /* call router init (for arp subsystem etc.) */
-    sr_init(&sr);
+    sr_init(&sr, nat_mode);
 
     /* -- whizbang main loop ;-) */
-    while( sr_read_from_server(&sr) == 1);
+    while( sr_read_from_server(&sr, nat_mode) == 1);
 
     sr_destroy_instance(&sr);
 

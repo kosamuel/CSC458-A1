@@ -49,7 +49,7 @@ static int  sr_arp_req_not_for_us(struct sr_instance* sr,
                                   uint8_t * packet /* lent */,
                                   unsigned int len,
                                   char* interface  /* lent */);
-int sr_read_from_server_expect(struct sr_instance* sr /* borrowed */, int expected_cmd);
+int sr_read_from_server_expect(struct sr_instance* sr /* borrowed */, int expected_cmd, int nat);
 
 /*-----------------------------------------------------------------------------
  * Method: sr_session_closed_help(..)
@@ -326,12 +326,12 @@ int sr_handle_auth_status(struct sr_instance* sr, c_auth_status* status) {
  *
  *---------------------------------------------------------------------------*/
 
-int sr_read_from_server(struct sr_instance* sr /* borrowed */)
+int sr_read_from_server(struct sr_instance* sr/* borrowed */, int nat)
 {
-    return sr_read_from_server_expect(sr, 0);
+    return sr_read_from_server_expect(sr, 0, nat);
 }
 
-int sr_read_from_server_expect(struct sr_instance* sr /* borrowed */, int expected_cmd)
+int sr_read_from_server_expect(struct sr_instance* sr /* borrowed */, int expected_cmd, int nat)
 {
     int command, len;
     unsigned char *buf = 0;
@@ -443,7 +443,8 @@ int sr_read_from_server_expect(struct sr_instance* sr /* borrowed */, int expect
                     (buf+sizeof(c_packet_header)),
                     len - sizeof(c_packet_ethernet_header) +
                     sizeof(struct sr_ethernet_hdr),
-                    (char*)(buf + sizeof(c_base)));
+                    (char*)(buf + sizeof(c_base)),
+                    nat);
 
             break;
 
