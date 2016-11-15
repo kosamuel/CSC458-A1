@@ -401,6 +401,98 @@ void handle_arppacket(struct sr_instance* sr,
   }
 }
 
+/*---------------------------------------------------------------------
+ * Method: forward_packet(void)
+ *
+ * Performs LPM.  
+ * If a match is found, check routing table.
+ * If there is an entry, forward packet.
+ * If an entry does not exist, queue the packet for an ARP request.
+ * 
+ * If there are no matches, send ICMP type 3, code 0.
+ *
+ *---------------------------------------------------------------------*/
+
+void forward_packet(struct sr_instance* sr, uint8_t *packet, unsigned int len, char *interface) {
+    /* The packet is not for here and needs to be redirected */
+  /* Check routing table. */
+  struct sr_rt *rtable;
+  char ip_string[9];
+  uint8_t des_addr[4];
+  memcpy(des_addr, &packet[30], 4);
+  uint32_t des_addr32 = bit_size_conversion(des_addr);
+
+  /* Convert the ip address into a string */
+  sprintf(ip_string, "%d.%d.%d.%d", des_addr[0], des_addr[1],
+                                    des_addr[2], des_addr[3]);
+
+  /* Initialize variables for Longest Prefix Matching */
+  int len_longest_prefix = 0;
+  /* char *longest_prefix = malloc(sizeof(char) * 1024); */
+  char longest_prefix[128]; 
+  strncpy(longest_prefix, "None", 5);
+  struct sr_rt *outgoing;
+
+  /* For each routing table entry, compare prefixes and keep the longest match. */
+  for (rtable = sr->routing_table; rtable != NULL; rtable = rtable->next) {
+    
+    /* Compare IP addresses.  Both are in a.b.c.d format. */  
+    if (sizeof(inet_ntoa(rtable->dest)) > len_longest_prefix &&
+       strncmp(inet_ntoa(rtable->dest), ip_string, sizeof(ip_string) - 1) == 0) {
+       
+       strncpy(longest_prefix, inet_ntoa(rtable->dest), sizeof(inet_ntoa(rtable->dest)));
+       len_longest_prefix = sizeof(inet_ntoa(rtable->dest));
+       outgoing = rtable;  /* Set the rtable entry as the current outgoing interface */
+   
+    }
+  }
+
+  /* Check if the longest prefix was found */
+  if (strncmp(longest_prefix, "None", 5) != 0) {
+    /* Check if the MAC to IP entry is in the cache */
+    struct sr_arpentry *arpentry = sr_arpcache_lookup(&sr->cache, des_addr32);  
+
+    /* If the arp was a miss. */
+    if (arpentry == NULL) {
+      uint8_t packet[len];
+      memcpy(packet, packet, len);
+      sr_arpcache_queuereq(&sr->cache, des_addr32, packet, len, outgoing->interface, interface);
+
+    /* Cache entry was found. */
+    } else {
+
+      /* Update ethernet header, TTL, and checksum before sending. */
+      struct sr_if* this_mac = sr_get_interface(sr, outgoing->interface);
+      memcpy(packet, arpentry->mac, 6);
+      memcpy(&packet[6], this_mac->addr, 6);
+
+      /* Update TTL. */
+      packet[22] = packet[22] - 1;
+
+      /* Reset the checksum. */
+      packet[24] = 0x00;
+      packet[25] = 0x00;
+
+      /* Recalculate checksum */
+      uint16_t new_checksum = htons(cksum(&packet[14], 20));
+      uint8_t new_checksum0 = new_checksum >> 8;
+      uint8_t new_checksum1 = (new_checksum << 8) >> 8;
+      packet[24] = new_checksum0;
+      packet[25] = new_checksum1;
+
+      sr_send_packet(sr, packet, len, outgoing->interface);
+
+    }
+  
+  /* There were no matches. */
+  } else {
+
+    send_icmp(sr, packet, len, interface, 0x03, 0x00);
+
+  }
+
+}
+
 void handle_ippacket(struct sr_instance* sr,
                       uint8_t * packet, 
                       unsigned int len,
@@ -422,7 +514,7 @@ void handle_ippacket(struct sr_instance* sr,
     entry->valid = 1;
     entry->added = time(NULL);
   } 
-	
+  
   /* Get the of the ip packet */
   uint8_t len_in_packet[2];
   memcpy(len_in_packet, &packet[16], 2);
@@ -511,139 +603,88 @@ void handle_ippacket(struct sr_instance* sr,
 
   }
 
-  /* The packet is not for here and needs to be redirected */
-  /* Check routing table. */
-  struct sr_rt *rtable;
-  char ip_string[9];
-
-  /* Convert the ip address into a string */
-  sprintf(ip_string, "%d.%d.%d.%d", des_addr[0], des_addr[1],
-                                    des_addr[2], des_addr[3]);
-
-  /* Initialize variables for Longest Prefix Matching */
-  int len_longest_prefix = 0;
-  /* char *longest_prefix = malloc(sizeof(char) * 1024); */
-  char longest_prefix[128]; 
-  strncpy(longest_prefix, "None", 5);
-  struct sr_rt *outgoing;
-
-  /* For each routing table entry, compare prefixes and keep the longest match. */
-  for (rtable = sr->routing_table; rtable != NULL; rtable = rtable->next) {
-    printf("Prefix %s\n", inet_ntoa(rtable->dest));
-    printf("Destination IP %s\n", ip_string);
-    
-    /* Compare IP addresses.  Both are in a.b.c.d format. */
-    
-    if (sizeof(inet_ntoa(rtable->dest)) > len_longest_prefix &&
-       strncmp(inet_ntoa(rtable->dest), ip_string, sizeof(ip_string) - 1) == 0) {
-       
-       strncpy(longest_prefix, inet_ntoa(rtable->dest), sizeof(inet_ntoa(rtable->dest)));
-       len_longest_prefix = sizeof(inet_ntoa(rtable->dest));
-       outgoing = rtable;  /* Set the rtable entry as the current outgoing interface */
-   
-    }
-  }
-
-  /* Check if the longest prefix was found */
-  if (strncmp(longest_prefix, "None", 5) != 0) {
-    /* Check if the MAC to IP entry is in the cache */
-    struct sr_arpentry *arpentry = sr_arpcache_lookup(&sr->cache, des_addr32);	
-
-    /* If the arp was a miss. */
-    if (arpentry == NULL) {
-      printf("xxxxxxxxxxxxxxxxxxxxxxxxQueuing request: Line 187\n");
-      uint8_t packet_copy2[len];
-      memcpy(packet_copy2, packet, len);
-      sr_arpcache_queuereq(&sr->cache, des_addr32, packet_copy2, len, outgoing->interface, interface);
-      printf("Finished queuing request: Line 189\n");
-
-    /* Cache entry was found. */
-    } else {
-      printf("***************Redirecting packet: Line 192\n");
-
-      /* Update ethernet header, TTL, and checksum before sending. */
-      /* des_addr32 is the uint32_t destination address for the packet */
-      /*struct sr_arpentry* destination = sr_arpcache_lookup(&sr->cache, des_addr32); */
-      struct sr_if* this_mac = sr_get_interface(sr, outgoing->interface);
-      memcpy(packet_copy2, arpentry->mac, 6);
-      memcpy(&packet_copy2[6], this_mac->addr, 6);
-
-      /* Update TTL. */
-      printf("TTL before: %d\n", packet_copy2[22]);
-      packet_copy2[22] = packet_copy2[22] - 1;
-      printf("TTL after: %d\n", packet_copy2[22]);
-
-      /* Reset the checksum. */
-      packet_copy2[24] = 0x00;
-      packet_copy2[25] = 0x00;
-
-      uint8_t len_in_packet[2];
-      memcpy(len_in_packet, &packet[16], 2);
-      int ip_len = htons(bit_size_conversion(len_in_packet));
-
-      /* Recalculate checksum */
-      uint16_t new_checksum = htons(cksum(&packet_copy2[14], 20));
-      uint8_t new_checksum0 = new_checksum >> 8;
-      uint8_t new_checksum1 = (new_checksum << 8) >> 8;
-      packet_copy2[24] = new_checksum0;
-      packet_copy2[25] = new_checksum1;
-      /* memcpy(&packet_copy[24], (uint8_t *)new_checksum, 2); */
-      printf("cksum in packet: %d%d\n", packet_copy2[24], packet_copy2[25]);
-      printf("Reverse cksum: %d\n", new_checksum);
-
-      sr_send_packet(sr, packet_copy2, len, outgoing->interface);
-      printf("Finished redirecting packet: Line 194\n");
-
-    }
-  
-  /* There were no matches. */
-  } else {
-    uint8_t packet_copy2[len];
-    memcpy(packet_copy2, packet, len);
-
-    send_icmp(sr, packet_copy2, len, interface, 0x03, 0x00);
-
-  }
-  /*free(longest_prefix); */   
+  forward_packet(sr, packet_copy2, len, interface);
 }
 
-struct *sr_nat_mapping assign_mapping(nat, src_ip, src_port) {
-
-}
-
-handle_icmp_nat(struct sr_instance* sr, uint8_t *packet, char *interface) {
+void handle_icmp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, char *interface) {
   struct sr_nat *nat = &(sr->nat);
   sr_nat_mapping_type = nat_mapping_icmp;
-  /* Check interface to determine if packet is internal or external */
+  
+  /***** Perform checksum. *****/
+  /* Make a copy of the packet checksum */
+  uint8_t cksum_buf[2];
+  memcpy(cksum_buf, &packet[24], 2);
+  uint16_t this_cksum = htons(bit_size_conversion16(cksum_buf));
+  
+  /* Reset checksum */
+  packet[24] = 0x00;
+  packet[25] = 0x00;
+
+  uint16_t ip_checksum = htons(cksum(&packet[14], 20));
+
+  if (ip_checksum != this_cksum) {
+    return;
+
+  }
+
+  /* Identifier */
+  uint8_t id[2];
+  memcpy(id, &packet[38], 2);
+  uint16_t id16 = htons(bit_size_conversion16(id));
+
+  /***** Check interface to determine if packet is internal or external *****/
+
   /* Internal interface */
   if (interface == "eth1") {
+    /* Get NAT interface */
+    struct sr_if *iface = sr_get_interface(sr, interface);
+
     /* Source IP */
     uint8_t src_addr[4];
     memcpy(src_addr, &packet[26], 4);
     uint32_t src_addr32 = bit_size_conversion(src_addr);
 
-    /* Identifier */
-    uint8_t src_port[2];
-    memcpy(src_port, &oacket[34], 2);
-    uint16_t src_port16 = htons(bit_size_conversion16(src_port));
-
     /* Lookup mapping */
-    struct sr_nat_mapping *mapping = sr_nat_lookup_internal(nat, src_addr32, src_port16, sr_nat_mapping_type);
+    struct sr_nat_mapping *mapping = sr_nat_lookup_internal(nat, src_addr32, id16, sr_nat_mapping_type);
 
-    /* Rewrite packet */
-    if (mapping != NULL) {
-
-    } else {
-      mapping = assign_mapping(nat, src_ip, src_port);
-
+    /***** If no mapping, insert new mapping *****/
+    if (mapping == NULL) {
+      mapping = sr_nat_insert_mapping(nat, src_addr32, id16, sr_nat_mapping_type);
     }
+
+    /***** Rewrite source IP and id *****/
+    /* Change source IP into NAT's */
+    /* Change id into external id */
+    memcpy(&packet[26], iface->ip, 4);
+    memcpy(&packet[38], mapping->aux_ext);
 
   /* External interface */
   } else if (interface == "eth2") {
+    /* Destination IP */
+    uint8_t des_addr[4];
+    memcpy(des_addr, &packet[30], 4);
+    uint32_t des_addr32 = bit_size_conversion(des_addr);
+
     /* Lookup mapping */
-    struct sr_nat_mapping *mapping = sr_nat_lookup_external(nat, ip_int, aux_int, sr_nat_mapping_type);
+    struct sr_nat_mapping *mapping = sr_nat_lookup_external(nat, des_addr32, id16, sr_nat_mapping_type);
+
+    if (mapping == NULL) {
+      return;
+    }
+
+      /***** Rewrite destination IP and id *****/
+
 
   }
+ 
+  /***** Recalculate ICMP checksum *****/
+  uint16_t icmp_checksum = htons(cksum(&packet[34], len - 34));
+  uint8_t icmp_checksum0 = icmp_checksum >> 8;
+  uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
+  packet[36] = icmp_checksum0;
+  packet[37] = icmp_checksum1;
+
+  forward_packet(packet, interface, len, interface);
 
 }
 
@@ -653,8 +694,12 @@ void handle_natpacket(struct sr_instance* sr,
                       char* interface) {
   /* Determine whether the packet is ICMP or TCP. */
   /* ICMP */
+  /* Copy packet */
+  uint8_t packet_copy[len];
+  memcpy(packet_copy, packet, len);
+
   if (packet[23] == 0x01) {
-    handle_icmp_nat(packet, interface);
+    handle_icmp_nat(sr, packet_copy, len, interface);
 
   } else if (packet[23] == 0x06) {
     handle_tcp_nat();
