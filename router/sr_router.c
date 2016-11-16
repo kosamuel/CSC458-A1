@@ -493,6 +493,13 @@ void forward_packet(struct sr_instance* sr, uint8_t *packet, unsigned int len, c
 
 }
 
+/*---------------------------------------------------------------------
+ * Method: handle_ippacket(void)
+ *
+ * Do whatever needs to be done with an IP packet.
+ *
+ *---------------------------------------------------------------------*/
+
 void handle_ippacket(struct sr_instance* sr,
                       uint8_t * packet, 
                       unsigned int len,
@@ -606,6 +613,13 @@ void handle_ippacket(struct sr_instance* sr,
   forward_packet(sr, packet_copy2, len, interface);
 }
 
+/*---------------------------------------------------------------------
+ * Method: handle_icmp_nat(void)
+ *
+ * Do whatever needs to be done with an ICMP packet with NAT mode on.
+ *
+ *---------------------------------------------------------------------*/
+
 void handle_icmp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, char *interface) {
   struct sr_nat *nat = &(sr->nat);
   sr_nat_mapping_type = nat_mapping_icmp;
@@ -653,10 +667,10 @@ void handle_icmp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, 
     }
 
     /***** Rewrite source IP and id *****/
-    /* Change source IP into NAT's */
+    /* Change source IP into assigned external IP */
     /* Change id into external id */
-    memcpy(&packet[26], iface->ip, 4);
-    memcpy(&packet[38], mapping->aux_ext);
+    memcpy(&packet[26], mapping->ip_ext, 4);
+    memcpy(&packet[38], mapping->aux_ext, 2);
 
   /* External interface */
   } else if (interface == "eth2") {
@@ -673,7 +687,10 @@ void handle_icmp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, 
     }
 
       /***** Rewrite destination IP and id *****/
-
+      /* Change destination IP into internal host's */
+      /* Change identifier to internal identifier */
+      memcpy(&packet[30], mapping->ip_int, 4);
+      memcpy(&packet[38], mapping->aux_int, 2);
 
   }
  
@@ -697,6 +714,39 @@ void handle_natpacket(struct sr_instance* sr,
   /* Copy packet */
   uint8_t packet_copy[len];
   memcpy(packet_copy, packet, len);
+
+  /***** Check if packet is for this router *****/
+  uint8_t des_addr[4];
+  memcpy(des_addr, &packet[30], 4);
+  uint32_t des_addr32 = bit_size_conversion(des_addr);
+
+  /* Get the receiving interface's IP */
+  uint32_t this_ip = sr_get_interface(sr, interface)->ip;
+
+  /* If the packet is for this router. */
+  struct sr_if *iface;
+  for (iface = sr->if_list; iface != NULL; iface = iface->next) {
+    if (memcmp(&des_addr32, &iface->ip, 4) == 0) {
+
+      /* It is an echo request */
+      if (packet[23] == 0x01) {
+        uint8_t packet_copy2[len];
+        memcpy(packet_copy2, packet, len);
+
+        send_icmp_reply(sr, packet_copy2, len, interface, 0x00, 0x00);
+        return;
+
+      /* It is an UDP or TCP packet */
+      } else if (packet[23] == 0x06 || packet[23] == 0x11) {
+        
+        uint8_t packet_copy2[len];
+        memcpy(packet_copy2, packet, len);
+
+        send_icmp(sr, packet_copy2, len, interface, 0x03, 0x03);
+        return;
+      }
+    }
+  }
 
   if (packet[23] == 0x01) {
     handle_icmp_nat(sr, packet_copy, len, interface);
