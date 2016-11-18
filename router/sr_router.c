@@ -614,13 +614,13 @@ void handle_ippacket(struct sr_instance* sr,
 }
 
 /*---------------------------------------------------------------------
- * Method: handle_icmp_nat(void)
+ * Method: nat_translate(void)
  *
  * Do whatever needs to be done with an ICMP packet with NAT mode on.
  *
  *---------------------------------------------------------------------*/
 
-void handle_icmp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, char *interface) {
+void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, char *interface) {
   struct sr_nat *nat = &(sr->nat);
   sr_nat_mapping_type type = nat_mapping_icmp;
   
@@ -638,7 +638,6 @@ void handle_icmp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, 
 
   if (ip_checksum != this_cksum) {
     return;
-
   }
 
   /* Identifier */
@@ -664,12 +663,18 @@ void handle_icmp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, 
     }
 
     /***** Rewrite source IP and id *****/
-    /* Change source IP into assigned external IP */
+    /* Change source IP into external IP */
     /* Change id into external id */
-    packet[26] = mapping->ip_ext;
+    uint32_t nat_addr = sr_get_interface(sr, "eth2")->ip;
+    packet[26] = nat_addr;
+    packet[27] = nat_addr >> 8;
+    packet[28] = nat_addr >> 16;
+    packet[29] = nat_addr >> 24;
+
+    /*packet[26] = mapping->ip_ext;
     packet[27] = mapping->ip_ext >> 8;
     packet[28] = mapping->ip_ext >> 16;
-    packet[29] = mapping->ip_ext >> 24;
+    packet[29] = mapping->ip_ext >> 24;*/
     packet[38] = mapping->aux_ext;
     packet[39] = mapping->aux_ext >> 8;
 
@@ -694,7 +699,7 @@ void handle_icmp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, 
       packet[32] = mapping->ip_int >> 16;
       packet[33] = mapping->ip_int >> 24;
       packet[38] = mapping->aux_int;
-      packet[39] = (mapping->aux_int << 8) >> 8;
+      packet[39] = mapping->aux_int >> 8;
 
   }
  
@@ -727,7 +732,8 @@ void handle_natpacket(struct sr_instance* sr,
   /* If the packet is for this router. */
   struct sr_if *iface;
   for (iface = sr->if_list; iface != NULL; iface = iface->next) {
-    if (memcmp(&des_addr32, &iface->ip, 4) == 0) {
+    if (strncmp(iface->name, "eth2", 4) != 0 && 
+        memcmp(&des_addr32, &iface->ip, 4) == 0) {
 
       /* It is an echo request */
       if (packet[23] == 0x01) {
@@ -750,7 +756,7 @@ void handle_natpacket(struct sr_instance* sr,
   }
 
   if (packet[23] == 0x01) {
-    handle_icmp_nat(sr, packet_copy, len, interface);
+    nat_translate(sr, packet_copy, len, interface);
 
   } else if (packet[23] == 0x06) {
     /*handle_tcp_nat();*/
