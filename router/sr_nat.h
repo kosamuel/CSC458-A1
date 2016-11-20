@@ -12,8 +12,21 @@ typedef enum {
   /* nat_mapping_udp, */
 } sr_nat_mapping_type;
 
+typedef enum {
+  SYN,
+  FIN,
+  SYNACK,
+  FINACK,
+  ACK,
+  EST
+} sr_nat_connection_state;
+
 struct sr_nat_connection {
   /* add TCP connection state data members here */
+  sr_nat_connection_state current_state;
+  sr_nat_connection_state next_state;
+  uint32_t ip_ext;
+  uint16_t aux_ext;
 
   struct sr_nat_connection *next;
 };
@@ -32,6 +45,9 @@ struct sr_nat_mapping {
 struct sr_nat {
   /* add any fields here */
   struct sr_nat_mapping *mappings;
+  int icmp_timeout;
+  int established_timeout;
+  int transitory_timeout;
 
   /* threading */
   pthread_mutex_t lock;
