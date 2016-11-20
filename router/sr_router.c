@@ -53,6 +53,9 @@ void sr_init(struct sr_instance* sr, int nat_mode, int icmp_timeout, int establi
     /* Add initialization code here! */
     /* Initialize NAT struct */
     sr_nat_init(&(sr->nat));
+    sr->nat->icmp_timeout = icmp_timeout;
+    sr->nat->established_timeout = established_timeout;
+    sr->nat->transitory_timeout = transitory_timeout;
 
 } /* -- sr_init -- */
 
