@@ -34,7 +34,7 @@
  *
  *---------------------------------------------------------------------*/
 
-void sr_init(struct sr_instance* sr, int nat_mode)
+void sr_init(struct sr_instance* sr, int nat_mode, int icmp_timeout, int established_timeout, int transitory_timeout)
 {
     /* REQUIRES */
     assert(sr);
@@ -659,7 +659,7 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
 
     /***** If no mapping, insert new mapping *****/
     if (mapping == NULL) {
-      mapping = sr_nat_insert_mapping(nat, src_addr32, id16, type);
+      mapping = sr_nat_insert_mapping(sr, nat, src_addr32, id16, type);
     }
 
     /***** Rewrite source IP and id *****/
@@ -711,6 +711,88 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
   packet[37] = icmp_checksum1;
 
   forward_packet(sr, packet, len, interface);
+  /*free(mapping);*/
+
+}
+
+/*---------------------------------------------------------------------
+ * Method: handle_tcp_nat(void)
+ *
+ * Do stuff to TCP packet
+ *
+ *---------------------------------------------------------------------*/
+
+void handle_tcp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, char *interface) {
+    sr_nat_mapping_type type = nat_mapping_tcp;
+
+    /* Identifier */
+    uint8_t id[2];
+    memcpy(id, &packet[38], 2);
+    uint16_t id16 = htons(bit_size_conversion16(id));
+
+  /* Internal interface */
+  if (strncmp(interface, "eth1", 4) == 0) {
+    /* Source IP */
+    uint8_t src_addr[4];
+    memcpy(src_addr, &packet[26], 4);
+    uint32_t src_addr32 = bit_size_conversion(src_addr);
+
+    /* Lookup mapping */
+    struct sr_nat_mapping *mapping = sr_nat_lookup_internal(nat, src_addr32, id16, type);
+
+    /***** If no mapping, insert new mapping *****/
+    if (mapping == NULL) {
+      mapping = sr_nat_insert_mapping(sr, nat, src_addr32, id16, type);
+      /* Add new connection */
+
+    /* Mapping exists */
+    } else {
+      /* Check if the packet is a SYN or a FIN */
+
+      /* Get current state of the connection */
+
+      /* If the connection is in the set up / tear down states */
+      if () {
+
+
+      /* Else translate packet */
+      } else {
+        nat_translate(sr, packet, len, interface);
+
+      }
+
+    }
+
+  /* External interface */
+  } else if (strncmp(interface, "eth2", 4) == 0) {
+    /* Destination IP */
+    uint8_t des_addr[4];
+    memcpy(des_addr, &packet[30], 4);
+    
+    /* Lookup mapping */
+    struct sr_nat_mapping *mapping = sr_nat_lookup_external(nat, id16, type);
+
+    if (mapping == NULL) {
+      /* Check if SYN packet */
+
+    } else {
+      /***** Check type of packet and state of connection *****/  
+      /* If connection is not in an established state */
+
+        /* If packet is a SYN ACK */
+
+        /* If packet is a FIN ACK */
+
+        /* If packet is a FIN */
+
+        /* If packet is an ACK after a FIN packet */
+
+      /* Translate packet */
+
+    }
+
+  }
+
 
 }
 
@@ -759,7 +841,7 @@ void handle_natpacket(struct sr_instance* sr,
     nat_translate(sr, packet_copy, len, interface);
 
   } else if (packet[23] == 0x06) {
-    /*handle_tcp_nat();*/
+    handle_tcp_nat();
 
   }
 

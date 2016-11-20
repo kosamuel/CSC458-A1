@@ -68,10 +68,14 @@ int main(int argc, char **argv)
     unsigned int topo = DEFAULT_TOPO;
     char *logfile = 0;
     struct sr_instance sr;
+    /* Default timeout times */
+    icmp_timeout = 60;
+    established_timeout = 7440;
+    transitory_timeout = 300;
 
     printf("Using %s\n", VERSION_INFO);
 
-    while ((c = getopt(argc, argv, "hs:v:p:u:t:r:l:T:n")) != EOF)
+    while ((c = getopt(argc, argv, "hs:v:p:u:t:r:l:T:nI:E:R:")) != EOF)
     {
         switch (c)
         {
@@ -106,6 +110,15 @@ int main(int argc, char **argv)
             /* Use NAT? */
             case 'n':
                 nat_mode = 1;
+            /* ICMP query timeout */
+            case 'I':
+                icmp_timeout = optarg;
+            /* TCP established idle timeout */
+            case 'E':
+                established_timeout = optarg;
+            /* TCP transitory idle timeout */
+            case 'R':
+                transitory_timeout = optarg;
         } /* switch */
     } /* -- while -- */
 
@@ -162,7 +175,7 @@ int main(int argc, char **argv)
     }
 
     /* call router init (for arp subsystem etc.) */
-    sr_init(&sr, nat_mode);
+    sr_init(&sr, nat_mode, icmp_timeout, established_timeout, transitory_timeout);
 
     /* -- whizbang main loop ;-) */
     while( sr_read_from_server(&sr, nat_mode) == 1);

@@ -68,7 +68,7 @@ int sr_connect_to_server(struct sr_instance* ,unsigned short , char* );
 int sr_read_from_server(struct sr_instance*, int nat);
 
 /* -- sr_router.c -- */
-void sr_init(struct sr_instance*, int nat);
+void sr_init(struct sr_instance*, int nat, int icmp_timeout, int established_timeout, int transitory_timeout);
 void sr_handlepacket(struct sr_instance* , uint8_t * , unsigned int , char* , int nat);
 uint32_t bit_size_conversion(uint8_t bytes[4]);
 uint16_t bit_size_conversion16(uint8_t bytes[2]);
