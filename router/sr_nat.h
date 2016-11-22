@@ -13,12 +13,13 @@ typedef enum {
 } sr_nat_mapping_type;
 
 typedef enum {
-  SYN,
-  FIN,
-  SYNACK,
-  FINACK,
-  ACK,
-  EST
+  SYN = 0,
+  FIN = 1,
+  SYNACK = 2,
+  FINACK = 3,
+  ACK = 4,
+  EST = 5,
+  CLOSED = 6
 } sr_nat_connection_state;
 
 struct sr_nat_connection {
@@ -27,6 +28,7 @@ struct sr_nat_connection {
   sr_nat_connection_state next_state;
   uint32_t ip_ext;
   uint16_t aux_ext;
+  time_t last_updated;
 
   struct sr_nat_connection *next;
 };
@@ -76,5 +78,6 @@ struct sr_nat_mapping *sr_nat_lookup_internal(struct sr_nat *nat,
 struct sr_nat_mapping *sr_nat_insert_mapping(struct sr_nat *nat,
   uint32_t ip_int, uint16_t aux_int, sr_nat_mapping_type type );
 
+void insert_connection(struct sr_nat_mapping mapping, uint32_t ip_ext, uint16_t port_ext);
 
 #endif

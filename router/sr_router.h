@@ -15,7 +15,6 @@
 
 #include "sr_protocol.h"
 #include "sr_arpcache.h"
-#include "sr_nat.h"
 
 /* we dont like this debug , but what to do for varargs ? */
 #ifdef _DEBUG_
@@ -65,10 +64,10 @@ int sr_verify_routing_table(struct sr_instance* sr);
 /* -- sr_vns_comm.c -- */
 int sr_send_packet(struct sr_instance* , uint8_t* , unsigned int , const char*);
 int sr_connect_to_server(struct sr_instance* ,unsigned short , char* );
-int sr_read_from_server(struct sr_instance*, int nat);
+int sr_read_from_server(struct sr_instance* );
 
 /* -- sr_router.c -- */
-void sr_init(struct sr_instance*, int nat, int icmp_timeout, int established_timeout, int transitory_timeout);
+void sr_init(struct sr_instance* );
 void sr_handlepacket(struct sr_instance* , uint8_t * , unsigned int , char* , int nat);
 uint32_t bit_size_conversion(uint8_t bytes[4]);
 uint16_t bit_size_conversion16(uint8_t bytes[2]);

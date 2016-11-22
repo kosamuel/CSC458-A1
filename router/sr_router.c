@@ -713,6 +713,7 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
   packet[36] = icmp_checksum0;
   packet[37] = icmp_checksum1;
 
+  mapping->last_updated = time(NULL);
   forward_packet(sr, packet, len, interface);
   /*free(mapping);*/
 
@@ -721,18 +722,32 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
 /*---------------------------------------------------------------------
  * Method: handle_tcp_nat(void)
  *
- * Do stuff to TCP packet
+ * Do stuff to TCP packet (mainly update state of connections)
  *
  *---------------------------------------------------------------------*/
 
 void handle_tcp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, char *interface) {
+
+    /***** Defining variables *****/
     sr_nat_mapping_type type = nat_mapping_tcp;
 
-    /* Identifier */
+    /* Internal Source Port */
     uint8_t id[2];
-    memcpy(id, &packet[38], 2);
+    memcpy(id, &packet[34], 2);
     uint16_t id16 = htons(bit_size_conversion16(id));
 
+    /* Destination IP */
+    uint8_t des_addr[4];
+    memcpy(des_addr, &packet[30], 4);
+    uint32_t dest_ip = bit_size_conversion(des_addr);
+
+    /* Destination port */
+    uint8_t dest_port[2];
+    memcpy(dest_port, &packet[36], 2);
+    uint16_t ext_port = htons(bit_size_conversion16(dest_port));
+
+
+  /* Updating TCP connection state */
   /* Internal interface */
   if (strncmp(interface, "eth1", 4) == 0) {
     /* Source IP */
@@ -747,55 +762,127 @@ void handle_tcp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, c
     if (mapping == NULL) {
       mapping = sr_nat_insert_mapping(sr, nat, src_addr32, id16, type);
       /* Add new connection */
+      insert_connection(mapping, dest_ip, ext_port);
+
 
     /* Mapping exists */
     } else {
-      /* Check if the packet is a SYN or a FIN */
+      
+      /***** Get current state of the connection and update state *****/
+      struct sr_nat_connection *conn;
+      for (conn = mapping->conns; conn != NULL; conn->next) {
+        /* Look for an exisiting connection to the specified host and port */
+        if ((conn->ip_ext == dest_ip) && (conn->aux_ext == ext_port)) {
+          break;
+        } 
+      }
 
-      /* Get current state of the connection */
+      if (conn != NULL) {
+        /* If connection is established */
+        if (conn->current_state == EST) {
 
-      /* If the connection is in the set up / tear down states */
-      if () {
+          /* Check for connection teardown */
+          if (packet[47] & 0b00000001) {
+            conn->current_state = FIN;
+            conn->next_state = FINACK;
+            conn->last_updated = time(NULL);
 
+          } 
 
-      /* Else translate packet */
+        /* If a connection is waiting for an ACK after a SYN ACK */ 
+        } else if (conn->current_state == SYNACK) {
+
+          if (packet[47] & 0b00010000) {
+            conn->current_state = EST;
+            conn->next_state = FIN;
+            conn->last_updated = time(NULL);
+
+          }
+
+        /* If the connection is in the process of tearing down */
+        } else if (conn->current_state == FIN && conn->next_state == ACK) {
+
+          if (packet[47] & 0b00010000) {
+            conn->current_state = CLOSED;
+
+          }
+        }
+
+      /* Connection doesn't exist */
       } else {
-        nat_translate(sr, packet, len, interface);
+        /* This means that it is a new connection */
+        if (packet[47] & 0b00000010) {
+          insert_connection(mapping, dest_ip, ext_port);
+        }
 
       }
 
-    }
-
   /* External interface */
   } else if (strncmp(interface, "eth2", 4) == 0) {
-    /* Destination IP */
-    uint8_t des_addr[4];
-    memcpy(des_addr, &packet[30], 4);
     
     /* Lookup mapping */
     struct sr_nat_mapping *mapping = sr_nat_lookup_external(nat, id16, type);
 
     if (mapping == NULL) {
-      /* Check if SYN packet */
+      return;
 
     } else {
+
+      /***** Find existing connection *****/
+      struct sr_nat_connection *conn;
+      for (conn = mapping->conns; conn != NULL; conn->next) {
+        /* Look for an exisiting connection to the specified host and port */
+        if ((conn->ip_ext == dest_ip) && (conn->aux_ext == ext_port)) {
+          break;
+        } 
+      }
+
+      /* Check if SYN packet */
+      if (conn == NULL) {
+
+        if (packet[47] & 0b00000010) {
+          sleep(6.0);
+          send_icmp(sr, packet, len, interface, 0x03, 0x03);
+
+        } 
+        
+        return;
+
+      }
+
       /***** Check type of packet and state of connection *****/  
-      /* If connection is not in an established state */
+      /* If packet is a SYN ACK */
+      if ((packet[47] & 0b00010010) && (current_state == SYN)) {
+        current_state = SYNACK;
+        next_state = ACK;
+        conn->last_updated = time(NULL);
 
-        /* If packet is a SYN ACK */
+      /* If packet is a FIN ACK */
+      } else if ((packet[47] & 0b00010001) && (current_state == FIN) && (next_state == FINACK)) {
+        current_state = FINACK;
+        next_state = FIN;
+        conn->last_updated = time(NULL);
 
-        /* If packet is a FIN ACK */
+      /* If packet is a FIN */
+      } else if ((packet[47] & 0b00000001) && (current_state == FINACK)) {
+        current_state = FIN;
+        next_state = ACK;
+        conn->last_updated = time(NULL);
 
-        /* If packet is a FIN */
+      /* If packet is an ACK after a FIN packet */
+      } else if ((packet[47] & 0b00010000) && (current_state == FIN) && (next_state == ACK)) {
+        current_state = CLOSED;
 
-        /* If packet is an ACK after a FIN packet */
-
-      /* Translate packet */
-
+      } else if ((conn->current_state == EST) && (packet[47] & 0b00000001)) {
+          conn->current_state = FIN;
+          conn->next_state = FINACK;
+          conn->last_updated = time(NULL);
+ 
+      }
     }
-
   }
 
+  nat_translate(sr, packet, len, interface, type);
 
 }
 

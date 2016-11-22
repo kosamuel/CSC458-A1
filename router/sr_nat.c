@@ -3,6 +3,9 @@
 #include <assert.h>
 #include "sr_nat.h"
 #include <unistd.h>
+#include "sr_if.h"
+
+int port_num = 5000;
 
 int sr_nat_init(struct sr_nat *nat) { /* Initializes the nat */
 
@@ -51,6 +54,123 @@ void *sr_nat_timeout(void *nat_ptr) {  /* Periodic Timout handling */
     time_t curtime = time(NULL);
 
     /* handle periodic tasks here */
+    struct sr_nat_mapping *prev = NULL;
+
+    struct sr_nat_mapping *mapping;
+    for (mapping = &(sr->mappings); mapping != NULL; mapping->next) {
+      enum sr_nat_mapping_type icmp = nat_mapping_icmp;
+      enum sr_nat_mapping_type tcp = nat_mapping_tcp;
+
+      if (mapping->type == icmp) {
+        if (difftime(curtime,mapping->last_updated) > nat->icmp_timeout) {
+          
+          /* Make previous mapping link to mapping->next */
+          if (prev) {
+            prev->next = mapping->next;
+            free(mapping);
+            mapping = prev;
+
+          } else {
+            nat->mappings = mapping->next;
+            free(mapping);
+            mapping = nat->mappings;
+
+          }
+
+        } else {
+          prev = mapping;
+
+        }
+
+      } else if (mapping->type == tcp) {
+
+        enum sr_nat_connection_state established = EST;
+        struct sr_nat_connection *conn;
+        struct sr_nat_connection *prev_conn = NULL;
+
+        for (conn = mapping->conns; conn != NULL; conn->next) {
+
+          if (conn->current_state == established) {
+            if (difftime(curtime,conn->last_updated) > nat->established_timeout) {
+              if (prev_conn) {
+                prev_conn->next = conn->next;
+                free(conn);
+                conn = prev_conn;
+
+              } else {
+                mapping->conns = conn->next;
+                free(conn);
+                conn = mapping->conns;
+
+              }
+
+            } else {
+              prev_conn = conn;
+
+            }
+
+          } else if (conn->current_state != established) {
+            if (difftime(curtime,conn->last_updated) > nat->transitory_timeout) {
+              if (prev_conn) {
+                prev_conn->next = conn->next;
+                free(conn);
+                conn = prev_conn;
+
+              } else {
+                mapping->conns = conn->next;
+                free(conn);
+                conn = mapping->conns;
+
+              }
+
+            } else {
+              prev_conn = conn;
+
+            }
+            
+          } else if (conn->current_state == CLOSED) {
+            if (prev_conn) {
+              prev_conn->next = conn->next;
+              free(conn);
+              conn = prev_conn;
+
+            } else {
+              mapping->conns = conn->next;
+              free(conn);
+              conn = mapping->conns;
+
+            }
+
+          } 
+        }
+
+
+        /* Check if removing a connection makes the connection list empty */
+        if (mapping->conns == NULL) {
+
+
+          if (difftime(curtime,mapping->last_updated) > nat->icmp_timeout) {
+          
+            /* Make previous mapping link to mapping->next */
+            if (prev) {
+              prev->next = mapping->next;
+              free(mapping);
+              mapping = prev;
+
+            } else {
+              nat->mappings = mapping->next;
+              free(mapping);
+              mapping = nat->mappings;
+
+            }
+
+          } else {
+            prev = mapping;
+
+          }
+        }
+      }
+    }
 
     pthread_mutex_unlock(&(nat->lock));
   }
@@ -65,7 +185,21 @@ struct sr_nat_mapping *sr_nat_lookup_external(struct sr_nat *nat,
   pthread_mutex_lock(&(nat->lock));
 
   /* handle lookup here, malloc and assign to copy */
-  struct sr_nat_mapping *copy = NULL;
+  struct sr_nat_mapping *entry = NULL, *copy = NULL;
+
+  struct sr_nat_mapping *mapping;
+  for (mapping = nat->mappings; mapping != NULL; mapping->next) {
+      if (mapping->aux_ext == aux_ext) {
+          entry = mapping;
+      }
+  }
+  
+  /* Must return a copy b/c another thread could jump in and modify
+     table after we return. */
+  if (entry) {
+      copy = (struct sr_nat_mapping *) malloc(sizeof(struct sr_nat_mapping));
+      memcpy(copy, entry, sizeof(struct sr_nat_mapping));
+  }
 
   pthread_mutex_unlock(&(nat->lock));
   return copy;
@@ -79,7 +213,21 @@ struct sr_nat_mapping *sr_nat_lookup_internal(struct sr_nat *nat,
   pthread_mutex_lock(&(nat->lock));
 
   /* handle lookup here, malloc and assign to copy. */
-  struct sr_nat_mapping *copy = NULL;
+  struct sr_nat_mapping *entry = NULL, *copy = NULL;
+
+  struct sr_nat_mapping *mapping;
+  for (mapping = nat->mappings; mapping != NULL; mapping->next) {
+      if ((mapping->aux_int == aux_int) && (mapping->ip_int == ip_int)) {
+          entry = mapping;
+      }
+  }
+  
+  /* Must return a copy b/c another thread could jump in and modify
+     table after we return. */
+  if (entry) {
+      copy = (struct sr_nat_mapping *) malloc(sizeof(struct sr_nat_mapping));
+      memcpy(copy, entry, sizeof(struct sr_nat_mapping));
+  }
 
   pthread_mutex_unlock(&(nat->lock));
   return copy;
@@ -88,7 +236,7 @@ struct sr_nat_mapping *sr_nat_lookup_internal(struct sr_nat *nat,
 /* Insert a new mapping into the nat's mapping table.
    Actually returns a copy to the new mapping, for thread safety.
  */
-struct sr_nat_mapping *sr_nat_insert_mapping(struct sr_nat *nat,
+struct sr_nat_mapping *sr_nat_insert_mapping(struct sr_instance* sr, struct sr_nat *nat,
   uint32_t ip_int, uint16_t aux_int, sr_nat_mapping_type type ) {
 
   pthread_mutex_lock(&(nat->lock));
@@ -96,6 +244,49 @@ struct sr_nat_mapping *sr_nat_insert_mapping(struct sr_nat *nat,
   /* handle insert here, create a mapping, and then return a copy of it */
   struct sr_nat_mapping *mapping = NULL;
 
+  struct sr_nat_mapping *new_mapping = (struct sr_nat_mapping *)malloc(sizeof(struct sr_nat_mapping));
+
+  /* Set up the new mapping */
+  struct sr_if *iface = sr_get_interface(sr, "eth2");
+  new_mapping->type = type;
+  new_mapping->ip_int = ip_int;
+  new_mapping->ip_ext = iface->ip;
+  new_mapping->aux_int = aux_int;
+  new_mapping->aux_ext = port_num;
+  new_mapping->last_updated = time(NULL);
+
+  /* Initialize connection */
+  struct sr_nat_connection *conn = NULL;
+  new_mapping->conn = conn;
+
+  /* Add to exisiting list of mappings */
+  if (nat->mappings != NULL) {
+    new_mapping->next = nat->mappings->next;
+    nat->mappings = new_mapping;
+  } else {
+    nat->mappings = new_mapping;
+  }
+
+  /* Update port number */
+  port_num++;
+
+  /* Make a new copy of the mapping and return it */
+  mapping = (struct sr_nat_mapping *) malloc(sizeof(struct sr_nat_mapping));
+  memcpy(mapping, new_mapping, sizeof(struct sr_nat_mapping));
+
   pthread_mutex_unlock(&(nat->lock));
   return mapping;
+}
+
+void insert_connection(struct sr_nat_mapping mapping, uint32_t ip_ext, uint16_t port_ext) {
+  struct sr_nat_connection *new_conn = (struct sr_nat_connection *) malloc(sizeof(struct sr_nat_connection));
+  new_conn->current_state = SYN;
+  new_conn->next_state = SYNACK;
+  new_conn->ip_ext = ip_ext;
+  new_conn->aux_ext = port_ext;
+  new_conn->last_updated = time(NULL);
+
+  new_conn->next = mapping->conns;
+  mapping->conns = new_conn;
+
 }
