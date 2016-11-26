@@ -458,9 +458,9 @@ void forward_packet(struct sr_instance* sr, uint8_t *packet, unsigned int len, c
 
     /* If the arp was a miss. */
     if (arpentry == NULL) {
-      uint8_t packet[len];
-      memcpy(packet, packet, len);
-      sr_arpcache_queuereq(&sr->cache, des_addr32, packet, len, outgoing->interface, interface);
+      uint8_t packet_copy[len];
+      memcpy(packet_copy, packet, len);
+      sr_arpcache_queuereq(&sr->cache, des_addr32, packet_copy, len, outgoing->interface, interface);
 
     /* Cache entry was found. */
     } else {
@@ -654,10 +654,11 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
 
   /* Internal interface */
   if (strncmp(interface, "eth1", 4) == 0) {
+
     /* Source IP */
     uint8_t src_addr[4];
     memcpy(src_addr, &packet[26], 4);
-    uint32_t src_addr32 = bit_size_conversion(src_addr);
+    uint32_t src_addr32 = htonl(bit_size_conversion(src_addr));
 
     /* Lookup mapping */
     mapping = sr_nat_lookup_internal(nat, src_addr32, id16, type);
@@ -680,8 +681,8 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
     packet[27] = mapping->ip_ext >> 8;
     packet[28] = mapping->ip_ext >> 16;
     packet[29] = mapping->ip_ext >> 24;*/
-    packet[38] = mapping->aux_ext;
-    packet[39] = mapping->aux_ext >> 8;
+    packet[39] = mapping->aux_ext;
+    packet[38] = mapping->aux_ext >> 8;
 
   /* External interface */
   } else if (strncmp(interface, "eth2", 4) == 0) {
@@ -699,10 +700,10 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
       /***** Rewrite destination IP and id *****/
       /* Change destination IP into internal host's */
       /* Change identifier to internal identifier */
-      packet[30] = mapping->ip_int;
-      packet[31] = mapping->ip_int >> 8;
-      packet[32] = mapping->ip_int >> 16;
-      packet[33] = mapping->ip_int >> 24;
+      packet[33] = mapping->ip_int;
+      packet[32] = mapping->ip_int >> 8;
+      packet[31] = mapping->ip_int >> 16;
+      packet[30] = mapping->ip_int >> 24;
       packet[38] = mapping->aux_int;
       packet[39] = mapping->aux_int >> 8;
 
@@ -717,7 +718,7 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
 
   mapping->last_updated = time(NULL);
   forward_packet(sr, packet, len, interface);
-  /*free(mapping);*/
+  free(mapping);
 
 }
 
@@ -903,7 +904,7 @@ void handle_natpacket(struct sr_instance* sr,
   /***** Check if packet is for this router *****/
   uint8_t des_addr[4];
   memcpy(des_addr, &packet[30], 4);
-  uint32_t des_addr32 = bit_size_conversion(des_addr);
+  uint32_t des_addr32 = htonl(bit_size_conversion(des_addr));
 
   /* If the packet is for this router. */
   struct sr_if *iface;

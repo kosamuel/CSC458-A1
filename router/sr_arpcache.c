@@ -41,7 +41,7 @@ void send_arp_packet(struct sr_instance* sr,
     
     unsigned int etherlen = sizeof(ether);
     unsigned int arplen = sizeof(arp);
-    uint8_t* buf[etherlen + arplen];
+    uint8_t buf[etherlen + arplen];
     memcpy(buf, &ether, etherlen);
     memcpy(&buf[etherlen], &arp, arplen);
 

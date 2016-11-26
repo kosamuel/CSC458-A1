@@ -194,6 +194,7 @@ struct sr_nat_mapping *sr_nat_lookup_external(struct sr_nat *nat,
   for (mapping = nat->mappings; mapping != NULL; mapping->next) {
       if (mapping->aux_ext == aux_ext) {
           entry = mapping;
+          break;
       }
   }
   
@@ -222,6 +223,7 @@ struct sr_nat_mapping *sr_nat_lookup_internal(struct sr_nat *nat,
   for (mapping = nat->mappings; mapping != NULL; mapping->next) {
       if ((mapping->aux_int == aux_int) && (mapping->ip_int == ip_int)) {
           entry = mapping;
+          break;
       }
   }
   
