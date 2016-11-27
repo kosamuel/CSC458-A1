@@ -191,7 +191,7 @@ struct sr_nat_mapping *sr_nat_lookup_external(struct sr_nat *nat,
   struct sr_nat_mapping *entry = NULL, *copy = NULL;
 
   struct sr_nat_mapping *mapping;
-  for (mapping = nat->mappings; mapping != NULL; mapping->next) {
+  for (mapping = nat->mappings; mapping != NULL; mapping = mapping->next) {
       if (mapping->aux_ext == aux_ext) {
           entry = mapping;
           break;
@@ -220,7 +220,7 @@ struct sr_nat_mapping *sr_nat_lookup_internal(struct sr_nat *nat,
   struct sr_nat_mapping *entry = NULL, *copy = NULL;
 
   struct sr_nat_mapping *mapping;
-  for (mapping = nat->mappings; mapping != NULL; mapping->next) {
+  for (mapping = nat->mappings; mapping != NULL; mapping = mapping->next) {
       if ((mapping->aux_int == aux_int) && (mapping->ip_int == ip_int)) {
           entry = mapping;
           break;
@@ -268,6 +268,7 @@ struct sr_nat_mapping *sr_nat_insert_mapping(struct sr_instance* sr, struct sr_n
     new_mapping->next = nat->mappings->next;
     nat->mappings = new_mapping;
   } else {
+    new_mapping->next = NULL;
     nat->mappings = new_mapping;
   }
 
