@@ -704,12 +704,14 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
       packet[32] = mapping->ip_int >> 8;
       packet[31] = mapping->ip_int >> 16;
       packet[30] = mapping->ip_int >> 24;
-      packet[38] = mapping->aux_int;
-      packet[39] = mapping->aux_int >> 8;
+      packet[39] = mapping->aux_int;
+      packet[38] = mapping->aux_int >> 8;
 
   }
  
   /***** Recalculate ICMP checksum *****/
+  packet[36] = 0x00;
+  packet[37] = 0x00;
   uint16_t icmp_checksum = htons(cksum(&packet[34], len - 34));
   uint8_t icmp_checksum0 = icmp_checksum >> 8;
   uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
@@ -937,7 +939,7 @@ void handle_natpacket(struct sr_instance* sr,
     nat_translate(sr, packet_copy, len, interface, type);
 
   } else if (packet[23] == 0x06) {
-    handle_tcp_nat(sr, packet, len, interface);
+    handle_tcp_nat(sr, packet_copy, len, interface);
 
   }
 

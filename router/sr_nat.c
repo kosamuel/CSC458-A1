@@ -8,7 +8,7 @@
 #include <string.h>
 #include "sr_router.h"
 
-int port_num = 5000;
+uint16_t port_num = 5000;
 
 int sr_nat_init(struct sr_nat *nat) { /* Initializes the nat */
 
