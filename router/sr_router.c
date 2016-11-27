@@ -358,10 +358,13 @@ void handle_arppacket(struct sr_instance* sr,
 
   /* The packet is an arp reply. */
   } else if (packet[21] == 0x02) {
+    printf("Got arp reply line 361\n");
     /* Cache reply. */
     /* mac, ip of the replying machine */
     struct sr_arpreq *requests = sr_arpcache_insert(&sr->cache, mac, ip);
     
+    printf("Got arp reply for source: %d-%d-%d-%d\n", packet[28], packet[29], packet[30], packet[31]);
+
     /* 
     Go through request queue and send queued packets
     for this arp.
@@ -393,7 +396,11 @@ void handle_arppacket(struct sr_instance* sr,
         rpacket->buf[25] = new_checksum1;
 	      printf("new_checksum: %d\n", new_checksum);
         printf("new_checksum in packet: %d.%d\n", rpacket->buf[24], rpacket->buf[25]);
-
+	printf("In handle arp reply @ 397\n");
+	printf("rpacket->iface: %s\n", rpacket->iface);
+        printf("Packet destination: %d-%d-%d-%d\n", rpacket->buf[30],
+		rpacket->buf[31], rpacket->buf[32], rpacket->buf[33]);
+	
         sr_send_packet(sr, rpacket->buf, rpacket->len, rpacket->iface);
 
       }
@@ -439,7 +446,7 @@ void forward_packet(struct sr_instance* sr, uint8_t *packet, unsigned int len, c
 
   /* For each routing table entry, compare prefixes and keep the longest match. */
   for (rtable = sr->routing_table; rtable != NULL; rtable = rtable->next) {
-    
+
     /* Compare IP addresses.  Both are in a.b.c.d format. */  
     if (sizeof(inet_ntoa(rtable->dest)) > len_longest_prefix &&
        strncmp(inet_ntoa(rtable->dest), ip_string, sizeof(ip_string) - 1) == 0) {
@@ -458,9 +465,14 @@ void forward_packet(struct sr_instance* sr, uint8_t *packet, unsigned int len, c
 
     /* If the arp was a miss. */
     if (arpentry == NULL) {
-      uint8_t packet[len];
-      memcpy(packet, packet, len);
-      sr_arpcache_queuereq(&sr->cache, des_addr32, packet, len, outgoing->interface, interface);
+      printf("Caching icmp packet\n");
+      printf("Outgoing interface: %s\n", outgoing->interface);
+      printf("Receiving interface: %s\n", interface);
+      uint8_t packet_copy[len];
+      memcpy(packet_copy, packet, len);
+      printf("des_addr32 @ 467: %d\n", des_addr32);
+      sr_arpcache_queuereq(&sr->cache, des_addr32, packet_copy, len, outgoing->interface, interface);
+      printf("Finished caching\n");
 
     /* Cache entry was found. */
     } else {
@@ -484,12 +496,39 @@ void forward_packet(struct sr_instance* sr, uint8_t *packet, unsigned int len, c
       packet[24] = new_checksum0;
       packet[25] = new_checksum1;
 
+      printf("\n\nIn forward_packet\n");
+      printf("Send translated icmp pakcet line 487\n");
+      printf("outgoing->interface: %s\n", outgoing->interface);
+      printf("Packet destination: %d-%d-%d-%d\n", packet[30], packet[31],
+		packet[32], packet[33]);
+      printf("\n--------------------------------------------------------\n");
+      printf("Ether Des: %d:%d:%d:%d:%d:%d\n", packet[0], packet[1], packet[2],
+		packet[3], packet[4], packet[5]);
+      printf("Ether Src: %d:%d:%d:%d:%d:%d\n", packet[6], packet[7], packet[8],
+		packet[9], packet[10], packet[11]);
+      printf("Ethertype: %d %d\n", packet[12], packet[13]);
+      printf("Total Length: %d %d\n", packet[16], packet[17]);
+      printf("TTL: %d\n", packet[22]);
+      printf("Protocol: %d\n", packet[23]);
+      printf("Header Checksum: %d %d\n", packet[24], packet[25]);
+      printf("Src IP: %d-%d-%d-%d\n", packet[26], packet[27], packet[28], packet[29]);
+      printf("Dest IP: %d-%d-%d-%d\n", packet[30], packet[31], packet[32], packet[33]);
+      printf("ICMP Type: %d\n", packet[34]);
+      printf("ICMP Code: %d\n", packet[35]);
+      printf("ICMP Chksum: %d %d\n", packet[36], packet[37]);
+      printf("ICMP identifier: %d %d\n", packet[38], packet[39]);
+      printf("Seq num: %d %d\n", packet[40], packet[41]);
+      printf("----------------------------------------------------------\n");
+
+      printf("new_checksum: %d\n", new_checksum);
+      printf("new_checksum in packet: %d-%d\n\n", packet[24], packet[25]);
       sr_send_packet(sr, packet, len, outgoing->interface);
 
     }
   
   /* There were no matches. */
   } else {
+    printf("!!!!!!!!!!!!!!!There were no LPM matches!!!!!!!!!!!!!!!!!!!!\n");
 
     send_icmp(sr, packet, len, interface, 0x03, 0x00);
 
@@ -645,27 +684,43 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
     return;
   }
 
+  printf("Checksum passed line 648\n");
+
   /* Identifier */
   uint8_t id[2];
   memcpy(id, &packet[38], 2);
   uint16_t id16 = htons(bit_size_conversion16(id));
+  
+  printf("id16: %d\n", id16);
+  printf("&packet[38] (icmp identification): %d-%d\n", packet[38], packet[39]);
 
   /***** Check interface to determine if packet is internal or external *****/
 
   /* Internal interface */
   if (strncmp(interface, "eth1", 4) == 0) {
+    printf("Internal interface line 659\n");
+
     /* Source IP */
     uint8_t src_addr[4];
     memcpy(src_addr, &packet[26], 4);
-    uint32_t src_addr32 = bit_size_conversion(src_addr);
+    uint32_t src_addr32 = htonl(bit_size_conversion(src_addr));
+
+    printf("src_addr: %d-%d-%d-%d\n", src_addr[0], src_addr[1],
+					src_addr[2], src_addr[3]);
+    printf("src_addr32: %d\n", src_addr32);
+    printf("src_addr == src_addr32 %d\n", src_addr32 == 0x0A000164);
 
     /* Lookup mapping */
     mapping = sr_nat_lookup_internal(nat, src_addr32, id16, type);
 
     /***** If no mapping, insert new mapping *****/
     if (mapping == NULL) {
+      printf("Mapping == NULL line 675\n");
       mapping = sr_nat_insert_mapping(sr, nat, src_addr32, id16, type);
     }
+
+    printf("After mapping check/insertion line 679\n");
+    printf("mapping info: ip: %d port: %d\n", mapping->ip_int, mapping->aux_int);
 
     /***** Rewrite source IP and id *****/
     /* Change source IP into external IP */
@@ -676,15 +731,24 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
     packet[28] = nat_addr >> 16;
     packet[29] = nat_addr >> 24;
 
+    printf("packet nat source: %d-%d-%d-%d\n", packet[26], packet[27],
+						packet[28], packet[29]);
+    printf("nat_addr: %d\n", nat_addr);
+    printf("nat port: %d\n", mapping->aux_ext);
+
     /*packet[26] = mapping->ip_ext;
     packet[27] = mapping->ip_ext >> 8;
     packet[28] = mapping->ip_ext >> 16;
     packet[29] = mapping->ip_ext >> 24;*/
-    packet[38] = mapping->aux_ext;
-    packet[39] = mapping->aux_ext >> 8;
+    packet[39] = mapping->aux_ext;
+    packet[38] = mapping->aux_ext >> 8;
+   
+    printf("packet ext port: %d-%d\n", packet[38], packet[39]);
 
   /* External interface */
   } else if (strncmp(interface, "eth2", 4) == 0) {
+    printf("Received from external interface line 707\n");
+
     /* Destination IP */
     uint8_t des_addr[4];
     memcpy(des_addr, &packet[30], 4);
@@ -696,28 +760,44 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
       return;
     }
 
+    printf("-------------mapping->next: %s\n", mapping->next); 
+    printf("Mapping is not NULL in external @735\n");   
+
       /***** Rewrite destination IP and id *****/
       /* Change destination IP into internal host's */
       /* Change identifier to internal identifier */
-      packet[30] = mapping->ip_int;
-      packet[31] = mapping->ip_int >> 8;
-      packet[32] = mapping->ip_int >> 16;
-      packet[33] = mapping->ip_int >> 24;
-      packet[38] = mapping->aux_int;
-      packet[39] = mapping->aux_int >> 8;
-
+    printf("Destination of internal host: %d\n", mapping->ip_int);
+      packet[33] = mapping->ip_int;
+      packet[32] = mapping->ip_int >> 8;
+      packet[31] = mapping->ip_int >> 16;
+      packet[30] = mapping->ip_int >> 24;
+      packet[39] = mapping->aux_int;
+      packet[38] = mapping->aux_int >> 8;
+    printf("Destionation ip before sending: %d-%d-%d-%d\n", packet[30], 
+	packet[31], packet[32], packet[33]);
+    printf("\n\nDest eth before sending: %d:%d:%d:%d:%d:%d\n---------\n", packet[6], packet[7], packet[8],
+	packet[9], packet[10], packet[11]);
   }
  
   /***** Recalculate ICMP checksum *****/
-  uint16_t icmp_checksum = htons(cksum(&packet[34], len - 34));
+  packet[36] = 0x00;
+  packet[37] = 0x00;
+  uint16_t icmp_checksum = htons(cksum(&packet[34], 8));
   uint8_t icmp_checksum0 = icmp_checksum >> 8;
   uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
   packet[36] = icmp_checksum0;
   packet[37] = icmp_checksum1;
 
+  printf("icmp_checksum: %d\n", icmp_checksum);
+  printf("icmp checksum in packet: %d-%d\n", packet[36], packet[37]);
+
+  printf("Source ip addr before sending: %d-%d-%d-%d\n", packet[26], packet[27],
+							packet[28], packet[29]);
+
+  printf("Before forward_packet line 742\n");
   mapping->last_updated = time(NULL);
   forward_packet(sr, packet, len, interface);
-  /*free(mapping);*/
+  free(mapping);
 
 }
 
@@ -900,10 +980,16 @@ void handle_natpacket(struct sr_instance* sr,
   uint8_t packet_copy[len];
   memcpy(packet_copy, packet, len);
 
+  printf("dest addr in packet: %d-%d-%d-%d\n", packet[30], packet[31], 
+						packet[32], packet[33]);
+
   /***** Check if packet is for this router *****/
   uint8_t des_addr[4];
   memcpy(des_addr, &packet[30], 4);
-  uint32_t des_addr32 = bit_size_conversion(des_addr);
+  uint32_t des_addr32 = htonl(bit_size_conversion(des_addr));
+
+  printf("des_addr32: %d\n", des_addr32);
+  printf("des_addr32 == des_addr %d\n", des_addr32 == 0xAC400315);
 
   /* If the packet is for this router. */
   struct sr_if *iface;
@@ -931,7 +1017,10 @@ void handle_natpacket(struct sr_instance* sr,
     }
   }
 
+  printf("Line 940\n");
+
   if (packet[23] == 0x01) {
+    printf("ICMP packet\n");
     sr_nat_mapping_type type = nat_mapping_icmp;
     nat_translate(sr, packet_copy, len, interface, type);
 
@@ -972,12 +1061,21 @@ void sr_handlepacket(struct sr_instance* sr,
   assert(interface);
 
   printf("*** -> Received packet of length %d \n",len);
+  printf("NAT mode? %d\n", nat);  
+  printf("packet source eth: %d.%d.%d.%d.%d.%d\n", packet[6], packet[7], 
+		packet[8], packet[9], packet[10], packet[11]);
 
   /* The received packet is an arp packet.*/
   if (packet[12] == 0x08 && packet[13] == 0x06) {
+    printf("Got ARP line 1016\n");
+    printf("Packet source eth: %d:%d:%d:%d:%d:%d\n################\n", packet[6], 
+	packet[7], packet[8], packet[9], packet[10], packet[11]);
     handle_arppacket(sr, packet, len, interface);
 
   } else if (nat) {
+    printf("Got IP line 1055\n");
+    printf("Packet source eth: %d:%d:%d:%d:%d:%d\n###############\n", packet[6],
+	packet[7], packet[8], packet[9], packet[10], packet[11]);
     handle_natpacket(sr, packet, len, interface);
 
   /* The received packet is an IP packet. */  

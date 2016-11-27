@@ -8,7 +8,7 @@
 #include <string.h>
 #include "sr_router.h"
 
-int port_num = 5000;
+uint16_t port_num = 5000;
 
 int sr_nat_init(struct sr_nat *nat) { /* Initializes the nat */
 
@@ -57,7 +57,7 @@ void *sr_nat_timeout(void *nat_ptr) {  /* Periodic Timout handling */
     time_t curtime = time(NULL);
 
     /* handle periodic tasks here */
-    struct sr_nat_mapping *prev = NULL;
+    /*struct sr_nat_mapping *prev = NULL;
 
     struct sr_nat_mapping *mapping;
     for (mapping = nat->mappings; mapping != NULL; mapping->next) {
@@ -67,8 +67,8 @@ void *sr_nat_timeout(void *nat_ptr) {  /* Periodic Timout handling */
       if (mapping->type == icmp) {
         if (difftime(curtime,mapping->last_updated) > nat->icmp_timeout) {
           
-          /* Make previous mapping link to mapping->next */
-          if (prev) {
+          * Make previous mapping link to mapping->next */
+          /*if (prev) {
             prev->next = mapping->next;
             free(mapping);
             mapping = prev;
@@ -148,14 +148,14 @@ void *sr_nat_timeout(void *nat_ptr) {  /* Periodic Timout handling */
         }
 
 
-        /* Check if removing a connection makes the connection list empty */
-        if (mapping->conns == NULL) {
+        */ /*Check if removing a connection makes the connection list empty */
+        /*if (mapping->conns == NULL) {
 
 
           if (difftime(curtime,mapping->last_updated) > nat->icmp_timeout) {
           
-            /* Make previous mapping link to mapping->next */
-            if (prev) {
+            *//* Make previous mapping link to mapping->next */
+            /*if (prev) {
               prev->next = mapping->next;
               free(mapping);
               mapping = prev;
@@ -173,7 +173,7 @@ void *sr_nat_timeout(void *nat_ptr) {  /* Periodic Timout handling */
           }
         }
       }
-    }
+    }*/
 
     pthread_mutex_unlock(&(nat->lock));
   }
@@ -194,6 +194,7 @@ struct sr_nat_mapping *sr_nat_lookup_external(struct sr_nat *nat,
   for (mapping = nat->mappings; mapping != NULL; mapping->next) {
       if (mapping->aux_ext == aux_ext) {
           entry = mapping;
+          break;
       }
   }
   
@@ -219,9 +220,12 @@ struct sr_nat_mapping *sr_nat_lookup_internal(struct sr_nat *nat,
   struct sr_nat_mapping *entry = NULL, *copy = NULL;
 
   struct sr_nat_mapping *mapping;
-  for (mapping = nat->mappings; mapping != NULL; mapping->next) {
+  for (mapping = nat->mappings; mapping != NULL; mapping = mapping->next) {
+      printf("__________________________________________mapping: ip = %d, id = %d\n", mapping->ip_int, mapping->aux_int);
+      printf("__________________________________________mapping->next %d\n", mapping->next == NULL);
       if ((mapping->aux_int == aux_int) && (mapping->ip_int == ip_int)) {
           entry = mapping;
+          /*break;*/
       }
   }
   
@@ -266,6 +270,7 @@ struct sr_nat_mapping *sr_nat_insert_mapping(struct sr_instance* sr, struct sr_n
     new_mapping->next = nat->mappings->next;
     nat->mappings = new_mapping;
   } else {
+    new_mapping->next = NULL;
     nat->mappings = new_mapping;
   }
 

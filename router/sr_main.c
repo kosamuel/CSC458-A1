@@ -175,6 +175,7 @@ int main(int argc, char **argv)
     }
 
     /* call router init (for arp subsystem etc.) */
+    printf("NAT mode on ? %d\n", nat_mode);
     sr_init(&sr, nat_mode, icmp_timeout, established_timeout, transitory_timeout);
 
     /* -- whizbang main loop ;-) */

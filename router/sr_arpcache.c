@@ -15,6 +15,7 @@
 void send_arp_packet(struct sr_instance* sr,
                      struct sr_if* iface,
                      struct sr_arpreq* req) {
+    printf("In sr_arpcache.c\n");
     /*Create Ethernet header.*/
     struct sr_ethernet_hdr ether;
     unsigned long num = 0xFFFFFFFFFFFF;
@@ -33,6 +34,7 @@ void send_arp_packet(struct sr_instance* sr,
     arp.ar_op = htons(0x0001);
     memcpy(arp.ar_sha, iface->addr, ETHER_ADDR_LEN);
     arp.ar_sip = iface->ip;
+    printf("iface->ip: %d\n", arp.ar_sip);
 
     unsigned char no_addr[ETHER_ADDR_LEN] = {0x00,0x00,0x00,0x00,0x00,0x00};
 
@@ -41,10 +43,13 @@ void send_arp_packet(struct sr_instance* sr,
     
     unsigned int etherlen = sizeof(ether);
     unsigned int arplen = sizeof(arp);
-    uint8_t* buf[etherlen + arplen];
+    uint8_t buf[etherlen + arplen];
     memcpy(buf, &ether, etherlen);
     memcpy(&buf[etherlen], &arp, arplen);
 
+    printf("Sending arp request\n");
+    printf("Sending from %d-%d-%d-%d\n", buf[28], buf[29], buf[30], buf[31]);
+    printf("To %d-%d-%d-%d\n", buf[38], buf[39], buf[40], buf[41]);
     sr_send_packet(sr, buf, etherlen+arplen, iface->name);
     printf("ethertype: %d", buf[12]);
     printf("%d\n", buf[13]);
