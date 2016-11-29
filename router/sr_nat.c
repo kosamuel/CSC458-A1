@@ -57,41 +57,65 @@ void *sr_nat_timeout(void *nat_ptr) {  /* Periodic Timout handling */
     time_t curtime = time(NULL);
 
     /* handle periodic tasks here */
-    struct sr_nat_mapping *prev = NULL;
+    /*struct sr_nat_mapping *mapping, *prev = NULL, *next = NULL, *free_mapping = NULL;
+    mapping = nat->mappings;
+    while (mapping != NULL) {
+      /* ICMP */
+      /*if (mapping->type == nat_mapping_icmp) {
+        if (difftime(curtime,mapping->last_updated) > nat->icmp_timeout) { 
+            if (prev) {
+              next = mapping->next;
+              prev->next = next;
+            } else {
+              next = mapping->next;
+              nat->mappings = next;
+            }
 
-    struct sr_nat_mapping *mapping;
-    for (mapping = nat->mappings; mapping != NULL; mapping->next) {
-      sr_nat_mapping_type icmp = nat_mapping_icmp;
-      sr_nat_mapping_type tcp = nat_mapping_tcp;
-
-      if (mapping->type == icmp) {
-        if (difftime(curtime,mapping->last_updated) > nat->icmp_timeout) {
-          
-          /* Make previous mapping link to mapping->next */
-          if (prev) {
-            prev->next = mapping->next;
-            free(mapping);
-            mapping = prev;
-
-          } else {
-            nat->mappings = mapping->next;
-            free(mapping);
-            mapping = nat->mappings;
-
-          }
+            free_mapping = mapping;
+            mapping = mapping->next;
+            free(free_mapping);
 
         } else {
-          prev = mapping;
-
+          mapping = mapping->next;
         }
 
-      } else if (mapping->type == tcp) {
+      /* TCP */
+      /*} /*else if (mapping->type == nat_mapping_tcp) {
+
+        struct sr_nat_connection *conn, *cprev = NULL, *cnext = NULL, *free_conn = NULL;
+        while (conn != NULL) {
+          if (cprev) {
+            cnext = 
+          }
+
+        }
+      }
+    } */
+
+    /*struct sr_nat_mapping *mapping, *prev = NULL, *next = NULL; 
+        for (mapping = nat->mappings; mapping != NULL; mapping = mapping->next) {
+            if (difftime(curtime,mapping->last_updated) > nat->icmp_timeout &&
+                mapping->type == nat_mapping_icmp) {                
+                if (prev) {
+                    next = mapping->next;
+                    prev->next = next;
+                } 
+                else {
+                    next = mapping->next;
+                    nat->mappings = next;
+                }
+
+                free(mapping);
+              
+            }
+            prev = mapping;
+        }*//* else if (mapping->type == tcp) {
 
         sr_nat_connection_state established = EST;
         struct sr_nat_connection *conn;
         struct sr_nat_connection *prev_conn = NULL;
 
-        for (conn = mapping->conns; conn != NULL; conn->next) {
+        for (conn = mapping->conns; conn != NULL; conn = conn->next) {
 
           if (conn->current_state == established) {
             if (difftime(curtime,conn->last_updated) > nat->established_timeout) {
@@ -145,17 +169,17 @@ void *sr_nat_timeout(void *nat_ptr) {  /* Periodic Timout handling */
             }
 
           } 
-        }
+        }*/
 
 
         /* Check if removing a connection makes the connection list empty */
-        if (mapping->conns == NULL) {
+        /*if (mapping->conns == NULL) {
 
 
-          if (difftime(curtime,mapping->last_updated) > nat->icmp_timeout) {
+          if (difftime(curtime,mapping->last_updated) > nat->icmp_timeout) {*/
           
             /* Make previous mapping link to mapping->next */
-            if (prev) {
+            /*if (prev) {
               prev->next = mapping->next;
               free(mapping);
               mapping = prev;
@@ -173,7 +197,7 @@ void *sr_nat_timeout(void *nat_ptr) {  /* Periodic Timout handling */
           }
         }
       }
-    }
+    }*/
 
     pthread_mutex_unlock(&(nat->lock));
   }
@@ -192,7 +216,7 @@ struct sr_nat_mapping *sr_nat_lookup_external(struct sr_nat *nat,
 
   struct sr_nat_mapping *mapping;
   for (mapping = nat->mappings; mapping != NULL; mapping = mapping->next) {
-      if (mapping->aux_ext == aux_ext) {
+      if (mapping->aux_ext == aux_ext && mapping->type == type) {
           entry = mapping;
           break;
       }
@@ -221,7 +245,7 @@ struct sr_nat_mapping *sr_nat_lookup_internal(struct sr_nat *nat,
 
   struct sr_nat_mapping *mapping;
   for (mapping = nat->mappings; mapping != NULL; mapping = mapping->next) {
-      if ((mapping->aux_int == aux_int) && (mapping->ip_int == ip_int)) {
+      if ((mapping->aux_int == aux_int) && (mapping->ip_int == ip_int) && (mapping->type == type)) {
           entry = mapping;
           break;
       }

@@ -647,7 +647,11 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
 
   /* Identifier */
   uint8_t id[2];
-  memcpy(id, &packet[38], 2);
+  if (packet[23] == 0x01) {
+    memcpy(id, &packet[38], 2);
+  } else if (packet[23] == 0x06) {
+    memcpy(id, &packet[34], 2);
+  }
   uint16_t id16 = htons(bit_size_conversion16(id));
 
   /***** Check interface to determine if packet is internal or external *****/
@@ -681,8 +685,13 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
     packet[27] = mapping->ip_ext >> 8;
     packet[28] = mapping->ip_ext >> 16;
     packet[29] = mapping->ip_ext >> 24;*/
-    packet[39] = mapping->aux_ext;
-    packet[38] = mapping->aux_ext >> 8;
+    if (packet[23] == 0x01) {
+      packet[39] = mapping->aux_ext;
+      packet[38] = mapping->aux_ext >> 8;
+    } else if (packet[23] == 0x06) {
+      packet[35] = mapping->aux_ext;
+      packet[34] = mapping->aux_ext >> 8;
+    }
 
   /* External interface */
   } else if (strncmp(interface, "eth2", 4) == 0) {
@@ -704,19 +713,42 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
       packet[32] = mapping->ip_int >> 8;
       packet[31] = mapping->ip_int >> 16;
       packet[30] = mapping->ip_int >> 24;
-      packet[39] = mapping->aux_int;
-      packet[38] = mapping->aux_int >> 8;
+      
+      if (packet[23] == 0x01) {
+        packet[39] = mapping->aux_int;
+        packet[38] = mapping->aux_int >> 8;
+      } else if (packet[23] == 0x06) {
+        packet[35] = mapping->aux_int;
+        packet[34] = mapping->aux_int >> 8;
+      }
 
   }
  
   /***** Recalculate ICMP checksum *****/
-  packet[36] = 0x00;
-  packet[37] = 0x00;
-  uint16_t icmp_checksum = htons(cksum(&packet[34], len - 34));
-  uint8_t icmp_checksum0 = icmp_checksum >> 8;
-  uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
-  packet[36] = icmp_checksum0;
-  packet[37] = icmp_checksum1;
+  if (packet[23] == 0x01) {
+    packet[36] = 0x00;
+    packet[37] = 0x00;
+    uint16_t icmp_checksum = htons(cksum(&packet[34], len - 34));
+    uint8_t icmp_checksum0 = icmp_checksum >> 8;
+    uint8_t icmp_checksum1 = (icmp_checksum << 8) >> 8;
+    packet[36] = icmp_checksum0;
+    packet[37] = icmp_checksum1;
+
+  } else if (packet[23] == 0x06) {
+    uint8_t pheader[12];
+    memcpy(pheader, &packet[26], 8);
+    pheader[8] = 0x00;
+    pheader[9] = packet[23];
+    int tcp_len = len - 34;
+    pheader[10] = tcp_len >> 8;
+    pheader[11] = tcp_len;
+    uint16_t phdr_checksum = htons(cksum(pheader, 12));
+    uint8_t phdr_checksum0 = phdr_checksum >> 8;
+    uint8_t phdr_checksum1 = (phdr_checksum << 8) >> 8;
+    packet[50] = phdr_checksum0;
+    packet[51] = phdr_checksum1;
+
+  }
 
   mapping->last_updated = time(NULL);
   forward_packet(sr, packet, len, interface);
@@ -733,23 +765,23 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
 
 void handle_tcp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, char *interface) {
 
-    /***** Defining variables *****/
-    sr_nat_mapping_type type = nat_mapping_tcp;
+  /***** Defining variables *****/
+  sr_nat_mapping_type type = nat_mapping_tcp;
 
-    /* Internal Source Port */
-    uint8_t id[2];
-    memcpy(id, &packet[34], 2);
-    uint16_t id16 = htons(bit_size_conversion16(id));
+  /* Internal Source Port */
+  uint8_t id[2];
+  memcpy(id, &packet[34], 2);
+  uint16_t id16 = htons(bit_size_conversion16(id));
 
-    /* Destination IP */
-    uint8_t des_addr[4];
-    memcpy(des_addr, &packet[30], 4);
-    uint32_t dest_ip = bit_size_conversion(des_addr);
+  /* Destination IP */
+  uint8_t des_addr[4];
+  memcpy(des_addr, &packet[30], 4);
+  uint32_t dest_ip = bit_size_conversion(des_addr);
 
-    /* Destination port */
-    uint8_t dest_port[2];
-    memcpy(dest_port, &packet[36], 2);
-    uint16_t ext_port = htons(bit_size_conversion16(dest_port));
+  /* Destination port */
+  uint8_t dest_port[2];
+  memcpy(dest_port, &packet[36], 2);
+  uint16_t ext_port = htons(bit_size_conversion16(dest_port));
 
 
   /* Updating TCP connection state */
@@ -835,11 +867,9 @@ void handle_tcp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, c
 
       /***** Find existing connection *****/
       struct sr_nat_connection *conn = NULL;
-      struct sr_nat_connection *search_conn;
-      for (search_conn = mapping->conns; search_conn != NULL; search_conn->next) {
+      for (conn = mapping->conns; conn != NULL; conn = conn->next) {
         /* Look for an exisiting connection to the specified host and port */
-        if ((search_conn->ip_ext == dest_ip) && (search_conn->aux_ext == ext_port)) {
-	  conn = search_conn;
+        if ((conn->ip_ext == dest_ip) && (conn->aux_ext == ext_port)) {
           break;
         } 
       }
@@ -849,7 +879,18 @@ void handle_tcp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, c
 
         if (packet[47] & 0b00000010) {
           sleep(6.0);
-          send_icmp(sr, packet, len, interface, 0x03, 0x03);
+
+          struct sr_nat_connection *conn = NULL;
+          for (conn = mapping->conns; conn != NULL; conn = conn->next) {
+            /* Look for an exisiting connection to the specified host and port */
+            if ((conn->ip_ext == dest_ip) && (conn->aux_ext == ext_port)) {
+              break;
+            } 
+          }
+
+          if (conn == NULL) {
+            send_icmp(sr, packet, len, interface, 0x03, 0x03);
+          }
 
         } 
         
@@ -900,8 +941,8 @@ void handle_natpacket(struct sr_instance* sr,
   /* Determine whether the packet is ICMP or TCP. */
   /* ICMP */
   /* Copy packet */
-  uint8_t packet_copy[len];
-  memcpy(packet_copy, packet, len);
+  /*uint8_t packet_copy[len];
+  memcpy(packet_copy, packet, len);*/
 
   /***** Check if packet is for this router *****/
   uint8_t des_addr[4];
@@ -936,10 +977,10 @@ void handle_natpacket(struct sr_instance* sr,
 
   if (packet[23] == 0x01) {
     sr_nat_mapping_type type = nat_mapping_icmp;
-    nat_translate(sr, packet_copy, len, interface, type);
+    nat_translate(sr, packet, len, interface, type);
 
   } else if (packet[23] == 0x06) {
-    handle_tcp_nat(sr, packet_copy, len, interface);
+    handle_tcp_nat(sr, packet, len, interface);
 
   }
 
@@ -981,7 +1022,9 @@ void sr_handlepacket(struct sr_instance* sr,
     handle_arppacket(sr, packet, len, interface);
 
   } else if (nat) {
-    handle_natpacket(sr, packet, len, interface);
+    uint8_t packet_copy[len];
+    memcpy(packet_copy, packet, len);
+    handle_natpacket(sr, packet_copy, len, interface);
 
   /* The received packet is an IP packet. */  
   } else if (packet[12] == 0x08 && packet[13] == 0x00) {
