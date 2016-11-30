@@ -856,12 +856,21 @@ void handle_tcp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, c
     }
   /* External interface */
   } else if (strncmp(interface, "eth2", 4) == 0) {
-    
+
     /* Lookup mapping */
     struct sr_nat_mapping *mapping = sr_nat_lookup_external(&(sr->nat), id16, type);
 
     if (mapping == NULL) {
-      return;
+      if (packet[47] & 0b00000010) {
+        if (packet[36] == 0x00 && packet[37] == 0x16){
+          send_icmp(sr, packet, len, interface, 0x03, 0x03);
+          return;
+        }
+
+        sleep(6.0);
+        send_icmp(sr, packet, len, interface, 0x03, 0x03);
+        return;
+      }
 
     } else {
 
@@ -878,8 +887,6 @@ void handle_tcp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, c
       if (conn == NULL) {
 
         if (packet[47] & 0b00000010) {
-          sleep(6.0);
-
           struct sr_nat_connection *conn = NULL;
           for (conn = mapping->conns; conn != NULL; conn = conn->next) {
             /* Look for an exisiting connection to the specified host and port */
@@ -889,10 +896,11 @@ void handle_tcp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, c
           }
 
           if (conn == NULL) {
+
             send_icmp(sr, packet, len, interface, 0x03, 0x03);
           }
 
-        } 
+        }
         
         return;
 
@@ -938,8 +946,6 @@ void handle_natpacket(struct sr_instance* sr,
                       uint8_t * packet, 
                       unsigned int len,
                       char* interface) {
-  /* Determine whether the packet is ICMP or TCP. */
-  /* ICMP */
   /* Copy packet */
   /*uint8_t packet_copy[len];
   memcpy(packet_copy, packet, len);*/
@@ -947,8 +953,8 @@ void handle_natpacket(struct sr_instance* sr,
   /***** Check if packet is for this router *****/
   uint8_t des_addr[4];
   memcpy(des_addr, &packet[30], 4);
-  uint32_t des_addr32 = htonl(bit_size_conversion(des_addr));
-
+  uint32_t des_addr32 = (bit_size_conversion(des_addr));
+      
   /* If the packet is for this router. */
   struct sr_if *iface;
   for (iface = sr->if_list; iface != NULL; iface = iface->next) {

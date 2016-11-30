@@ -92,85 +92,54 @@ void *sr_nat_timeout(void *nat_ptr) {  /* Periodic Timout handling */
       }
     } */
 
-    /*struct sr_nat_mapping *mapping, *prev = NULL, *next = NULL; 
-        for (mapping = nat->mappings; mapping != NULL; mapping = mapping->next) {
-            if (difftime(curtime,mapping->last_updated) > nat->icmp_timeout &&
-                mapping->type == nat_mapping_icmp) {                
-                if (prev) {
-                    next = mapping->next;
-                    prev->next = next;
-                } 
-                else {
-                    next = mapping->next;
-                    nat->mappings = next;
-                }
+    struct sr_nat_mapping *mapping, *prev = NULL, *next = NULL; 
+    for (mapping = nat->mappings; mapping != NULL; mapping = mapping->next) {
+      if (difftime(curtime,mapping->last_updated) > nat->icmp_timeout+5 &&
+        mapping->type == nat_mapping_icmp) {                
+        if (prev) {
+            next = mapping->next;
+            prev->next = next;
 
-                free(mapping);
-              
-            }
-            prev = mapping;
-        }*//* else if (mapping->type == tcp) {
+        } else {
+            next = mapping->next;
+            nat->mappings = next;
 
-        sr_nat_connection_state established = EST;
-        struct sr_nat_connection *conn;
-        struct sr_nat_connection *prev_conn = NULL;
+        }
 
+        free(mapping);        
+
+      } else if (mapping->type == nat_mapping_tcp) {
+
+        struct sr_nat_connection *conn, *prev_conn = NULL, *next_conn = NULL;
         for (conn = mapping->conns; conn != NULL; conn = conn->next) {
+          int timeout_time;
+          if (conn->current_state == EST) {
+            timeout_time = nat->established_timeout;
+          } else {
+            timeout_time = nat->transitory_timeout;
+          }
 
-          if (conn->current_state == established) {
-            if (difftime(curtime,conn->last_updated) > nat->established_timeout) {
-              if (prev_conn) {
-                prev_conn->next = conn->next;
-                free(conn);
-                conn = prev_conn;
-
-              } else {
-                mapping->conns = conn->next;
-                free(conn);
-                conn = mapping->conns;
-
-              }
-
-            } else {
-              prev_conn = conn;
-
-            }
-
-          } else if (conn->current_state != established) {
-            if (difftime(curtime,conn->last_updated) > nat->transitory_timeout) {
-              if (prev_conn) {
-                prev_conn->next = conn->next;
-                free(conn);
-                conn = prev_conn;
-
-              } else {
-                mapping->conns = conn->next;
-                free(conn);
-                conn = mapping->conns;
-
-              }
-
-            } else {
-              prev_conn = conn;
-
-            }
-            
-          } else if (conn->current_state == CLOSED) {
+          if (difftime(curtime,conn->last_updated) > timeout_time) {
             if (prev_conn) {
-              prev_conn->next = conn->next;
-              free(conn);
-              conn = prev_conn;
+              next_conn = conn->next;
+              prev_conn->next = next_conn;
 
             } else {
-              mapping->conns = conn->next;
-              free(conn);
-              conn = mapping->conns;
+              next_conn = conn->next;
+              mapping->conns = next_conn;
 
             }
+
+            free(conn);
 
           } 
-        }*/
+          prev_conn = conn;
 
+          }
+      }
+      prev = mapping;
+    }
+      
 
         /* Check if removing a connection makes the connection list empty */
         /*if (mapping->conns == NULL) {
