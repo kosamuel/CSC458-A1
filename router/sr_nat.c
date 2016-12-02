@@ -276,7 +276,9 @@ struct sr_nat_mapping *sr_nat_insert_mapping(struct sr_instance* sr, struct sr_n
   return mapping;
 }
 
-void insert_connection(struct sr_nat_mapping *mapping, uint32_t ip_ext, uint16_t port_ext) {
+void insert_connection(struct sr_nat *nat, struct sr_nat_mapping *mapping, uint32_t ip_ext, uint16_t port_ext) {
+  pthread_mutex_lock(&(nat->lock));
+
   struct sr_nat_connection *new_conn = (struct sr_nat_connection *) malloc(sizeof(struct sr_nat_connection));
   new_conn->current_state = SYN;
   new_conn->next_state = SYNACK;
@@ -286,5 +288,24 @@ void insert_connection(struct sr_nat_mapping *mapping, uint32_t ip_ext, uint16_t
 
   new_conn->next = mapping->conns;
   mapping->conns = new_conn;
+
+  pthread_mutex_unlock(&(nat->lock));
+
+}
+
+struct sr_nat_connection *find_connection(struct sr_nat *nat, struct sr_nat_mapping *mapping, uint32_t dest_ip, uint16_t ext_port) {
+  pthread_mutex_lock(&(nat->lock));
+
+  struct sr_nat_connection *conn, *copy = NULL;
+  for (conn = mapping->conns; conn != NULL; conn->next) {
+    /* Look for an exisiting connection to the specified host and port */
+    if ((conn->ip_ext == dest_ip) && (conn->aux_ext == ext_port)) {
+      break;
+    } 
+  }
+
+  return conn;
+
+  pthread_mutex_unlock(&(nat->lock));
 
 }

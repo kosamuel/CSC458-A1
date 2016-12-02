@@ -617,6 +617,56 @@ void handle_ippacket(struct sr_instance* sr,
   forward_packet(sr, packet_copy2, len, interface);
 }
 
+void forward_packet2(struct sr_instance* sr, uint8_t *packet, unsigned int len, char *interface) {
+  uint8_t des_addr[4];
+  memcpy(des_addr, &packet[30], 4);
+  uint32_t des_addr32 = bit_size_conversion(des_addr);
+
+  char *outgoing;
+  if (strncmp(interface, "eth2", 4) == 0) {
+    outgoing = "eth1";
+
+  } else if (strncmp(interface, "eth1", 4) == 0) {
+    outgoing = "eth2";
+
+  }
+
+  /* Check if the MAC to IP entry is in the cache */
+  struct sr_arpentry *arpentry = sr_arpcache_lookup(&sr->cache, des_addr32);  
+
+  /* If the arp was a miss. */
+  if (arpentry == NULL) {
+    uint8_t packet_copy[len];
+    memcpy(packet_copy, packet, len);
+    sr_arpcache_queuereq(&sr->cache, des_addr32, packet_copy, len, outgoing, interface);
+
+  /* Cache entry was found. */
+  } else {
+    /* Update ethernet header, TTL, and checksum before sending. */
+    struct sr_if* this_mac = sr_get_interface(sr, outgoing);
+    memcpy(packet, arpentry->mac, 6);
+    memcpy(&packet[6], this_mac->addr, 6);
+
+    /* Update TTL. */
+    packet[22] = packet[22] - 1;
+
+    /* Reset the checksum. */
+    packet[24] = 0x00;
+    packet[25] = 0x00;
+
+    /* Recalculate checksum */
+    uint16_t new_checksum = htons(cksum(&packet[14], 20));
+    uint8_t new_checksum0 = new_checksum >> 8;
+    uint8_t new_checksum1 = (new_checksum << 8) >> 8;
+    packet[24] = new_checksum0;
+    packet[25] = new_checksum1;
+
+    sr_send_packet(sr, packet, len, outgoing);
+
+  }
+
+}
+
 /*---------------------------------------------------------------------
  * Method: nat_translate(void)
  *
@@ -681,10 +731,6 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
     packet[28] = nat_addr >> 16;
     packet[29] = nat_addr >> 24;
 
-    /*packet[26] = mapping->ip_ext;
-    packet[27] = mapping->ip_ext >> 8;
-    packet[28] = mapping->ip_ext >> 16;
-    packet[29] = mapping->ip_ext >> 24;*/
     if (packet[23] == 0x01) {
       packet[39] = mapping->aux_ext;
       packet[38] = mapping->aux_ext >> 8;
@@ -751,7 +797,11 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
   }
 
   mapping->last_updated = time(NULL);
-  forward_packet(sr, packet, len, interface);
+  if (packet[23] == 0x01) {
+    forward_packet2(sr, packet, len, interface);
+  } else {
+    forward_packet(sr, packet, len, interface);
+  }
   free(mapping);
 
 }
@@ -764,6 +814,11 @@ void nat_translate(struct sr_instance* sr, uint8_t *packet, unsigned int len, ch
  *---------------------------------------------------------------------*/
 
 void handle_tcp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, char *interface) {
+  struct sr_nat *nat = &(sr->nat);
+  if (packet[36] == 0x00 && packet[37] == 0x16){
+    send_icmp(sr, packet, len, interface, 0x03, 0x03);
+    return;
+  }
 
   /***** Defining variables *****/
   sr_nat_mapping_type type = nat_mapping_tcp;
@@ -783,6 +838,7 @@ void handle_tcp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, c
   memcpy(dest_port, &packet[36], 2);
   uint16_t ext_port = htons(bit_size_conversion16(dest_port));
 
+  struct sr_nat_connection *conn = NULL;
 
   /* Updating TCP connection state */
   /* Internal interface */
@@ -799,59 +855,20 @@ void handle_tcp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, c
     if (mapping == NULL) {
       mapping = sr_nat_insert_mapping(sr, &(sr->nat), src_addr32, id16, type);
       /* Add new connection */
-      insert_connection(mapping, dest_ip, ext_port);
+      insert_connection(nat, mapping, dest_ip, ext_port);
 
 
     /* Mapping exists */
     } else {
       
       /***** Get current state of the connection and update state *****/
-      struct sr_nat_connection *conn;
-      for (conn = mapping->conns; conn != NULL; conn->next) {
-        /* Look for an exisiting connection to the specified host and port */
-        if ((conn->ip_ext == dest_ip) && (conn->aux_ext == ext_port)) {
-          break;
-        } 
-      }
+      conn = find_connection(nat, mapping, dest_ip, ext_port);
 
-      if (conn != NULL) {
-        /* If connection is established */
-        if (conn->current_state == EST) {
-
-          /* Check for connection teardown */
-          if (packet[47] & 0b00000001) {
-            conn->current_state = FIN;
-            conn->next_state = FINACK;
-            conn->last_updated = time(NULL);
-
-          } 
-
-        /* If a connection is waiting for an ACK after a SYN ACK */ 
-        } else if (conn->current_state == SYNACK) {
-
-          if (packet[47] & 0b00010000) {
-            conn->current_state = EST;
-            conn->next_state = FIN;
-            conn->last_updated = time(NULL);
-
-          }
-
-        /* If the connection is in the process of tearing down */
-        } else if (conn->current_state == FIN && conn->next_state == ACK) {
-
-          if (packet[47] & 0b00010000) {
-            conn->current_state = CLOSED;
-
-          }
-        }
-
-      /* Connection doesn't exist */
-      } else {
+      if (conn == NULL) {
         /* This means that it is a new connection */
         if (packet[47] & 0b00000010) {
-          insert_connection(mapping, dest_ip, ext_port);
+          insert_connection(nat, mapping, dest_ip, ext_port);
         }
-
       }
     }
   /* External interface */
@@ -862,38 +879,27 @@ void handle_tcp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, c
 
     if (mapping == NULL) {
       if (packet[47] & 0b00000010) {
-        if (packet[36] == 0x00 && packet[37] == 0x16){
+        sleep(6.0);
+        mapping = sr_nat_lookup_external(&(sr->nat), id16, type);
+        if (mapping == NULL) {
           send_icmp(sr, packet, len, interface, 0x03, 0x03);
           return;
         }
 
-        sleep(6.0);
-        send_icmp(sr, packet, len, interface, 0x03, 0x03);
-        return;
+        conn = find_connection(nat, mapping, dest_ip, ext_port);
+
       }
 
     } else {
 
       /***** Find existing connection *****/
-      struct sr_nat_connection *conn = NULL;
-      for (conn = mapping->conns; conn != NULL; conn = conn->next) {
-        /* Look for an exisiting connection to the specified host and port */
-        if ((conn->ip_ext == dest_ip) && (conn->aux_ext == ext_port)) {
-          break;
-        } 
-      }
+      conn = find_connection(nat, mapping, dest_ip, ext_port);
 
       /* Check if SYN packet */
       if (conn == NULL) {
 
         if (packet[47] & 0b00000010) {
-          struct sr_nat_connection *conn = NULL;
-          for (conn = mapping->conns; conn != NULL; conn = conn->next) {
-            /* Look for an exisiting connection to the specified host and port */
-            if ((conn->ip_ext == dest_ip) && (conn->aux_ext == ext_port)) {
-              break;
-            } 
-          }
+          conn = find_connection(nat, mapping, dest_ip, ext_port);
 
           if (conn == NULL) {
 
@@ -905,36 +911,34 @@ void handle_tcp_nat(struct sr_instance* sr, uint8_t *packet, unsigned int len, c
         return;
 
       }
+    }
+  }
 
-      /***** Check type of packet and state of connection *****/  
-      /* If packet is a SYN ACK */
-      if ((packet[47] & 0b00010010) && (conn->current_state == SYN)) {
-        conn->current_state = SYNACK;
-        conn->next_state = ACK;
-        conn->last_updated = time(NULL);
+  if (conn != NULL) {
+    if ((conn->current_state == SYN) && (packet[47] & 0b00010010)) {
+      conn->current_state = SYNACK;
+      conn->last_updated = time(NULL);
 
-      /* If packet is a FIN ACK */
-      } else if ((packet[47] & 0b00010001) && (conn->current_state == FIN) && (conn->next_state == FINACK)) {
-        conn->current_state = FINACK;
-        conn->next_state = FIN;
-        conn->last_updated = time(NULL);
+    } else if ((conn->current_state == SYNACK) && (packet[47] & 0b00010000)) {
+      conn->current_state = EST;
+      conn->last_updated = time(NULL);
 
-      /* If packet is a FIN */
-      } else if ((packet[47] & 0b00000001) && (conn->current_state == FINACK)) {
-        conn->current_state = FIN;
-        conn->next_state = ACK;
-        conn->last_updated = time(NULL);
+    } else if ((conn->current_state == EST) && (packet[47] & 0b00000001)) {
+      conn->current_state = FIN;
+      conn->last_updated = time(NULL);
 
-      /* If packet is an ACK after a FIN packet */
-      } else if ((packet[47] & 0b00010000) && (conn->current_state == FIN) && (conn->next_state == ACK)) {
-        conn->current_state = CLOSED;
+    } else if ((conn->current_state == FIN) && (packet[47] & 0b00010001)) {
+      conn->current_state = FINACK;
+      conn->last_updated = time(NULL);
 
-      } else if ((conn->current_state == EST) && (packet[47] & 0b00000001)) {
-          conn->current_state = FIN;
-          conn->next_state = FINACK;
-          conn->last_updated = time(NULL);
- 
-      }
+    } else if ((conn->current_state == FINACK) && (packet[47] & 0b00000001)) {
+      conn->current_state = FIN;
+      conn->last_updated = time(NULL);
+
+    } else if ((conn->current_state == FIN) && (packet[47] & 0b00010000)) {
+      conn->current_state = CLOSED;
+      conn->last_updated = time(NULL);
+
     }
   }
 

@@ -80,6 +80,7 @@ struct sr_nat_mapping *sr_nat_lookup_internal(struct sr_nat *nat,
 struct sr_nat_mapping *sr_nat_insert_mapping(struct sr_instance* sr, 
 struct sr_nat *nat, uint32_t ip_int, uint16_t aux_int, sr_nat_mapping_type type);
 
-void insert_connection(struct sr_nat_mapping *mapping, uint32_t ip_ext, uint16_t port_ext);
+void insert_connection(struct sr_nat *nat, struct sr_nat_mapping *mapping, uint32_t ip_ext, uint16_t port_ext);
+struct sr_nat_connection *find_connection(struct sr_nat *nat, struct sr_nat_mapping *mapping, uint32_t dest_ip, uint16_t ext_port);
 
 #endif
